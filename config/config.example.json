@@ -1,0 +1,19 @@
+{
+  "OPENAI_API_KEY": "sk-...",
+  "ELEVENLABS_API_KEY": "elevenlabs_...",
+  "YOUTUBE_CLIENT_ID": "...apps.googleusercontent.com",
+  "YOUTUBE_CLIENT_SECRET": "...",
+  "YOUTUBE_REFRESH_TOKEN": "...",
+  "YOUTUBE_REDIRECT_URI": "https://yourapp.example.com/oauth2/callback",
+  "VOICE_ID": "21m00Tcm4TlvDq8ikWAM",
+  "PERSONALITY_PROMPT": "You are an insightful, optimistic, and curious narrator who presents concise, engaging facts and narratives with a warm, friendly tone.",
+  "CRON_SECRET": "change-me-strong-secret",
+  "IMAGE_MODEL": "gpt-image-1",
+  "VIDEO_PRIVACY_STATUS": "public",
+  "TOPIC_TAGS": "ai,technology,facts",
+  "NUM_IMAGES": 8,
+  "TARGET_SECONDS": 120,
+  "VIDEO_CRON_SCHEDULE": "0 14 * * *",
+  "GCP_PROJECT_ID": "your-gcp-project",
+  "GCP_REGION": "us-central1"
+}

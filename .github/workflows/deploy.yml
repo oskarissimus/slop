@@ -1,0 +1,103 @@
+name: Deploy GCF Video Generator
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    types: [closed]
+    branches: [ master, main ]
+
+jobs:
+  deploy:
+    if: github.event_name == 'push' || (github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: Enable required APIs (first run only)
+        run: |
+          gcloud services enable cloudfunctions.googleapis.com cloudbuild.googleapis.com run.googleapis.com cloudscheduler.googleapis.com eventarc.googleapis.com
+
+      - name: Deploy Cloud Function (Gen 2)
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+        run: |
+          gcloud functions deploy generateVideo \
+            --gen2 \
+            --runtime=nodejs20 \
+            --region=${GCP_REGION} \
+            --entry-point=generateVideo \
+            --source=. \
+            --trigger-http \
+            --allow-unauthenticated=false \
+            --memory=2GiB \
+            --timeout=540s \
+            --set-env-vars=OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},ELEVENLABS_API_KEY=${{ secrets.ELEVENLABS_API_KEY }},YOUTUBE_CLIENT_ID=${{ secrets.YOUTUBE_CLIENT_ID }},YOUTUBE_CLIENT_SECRET=${{ secrets.YOUTUBE_CLIENT_SECRET }},YOUTUBE_REFRESH_TOKEN=${{ secrets.YOUTUBE_REFRESH_TOKEN }},YOUTUBE_REDIRECT_URI=${{ secrets.YOUTUBE_REDIRECT_URI }},VOICE_ID=${{ vars.VOICE_ID }},PERSONALITY_PROMPT=${{ vars.PERSONALITY_PROMPT }},CRON_SECRET=${{ secrets.CRON_SECRET }},IMAGE_MODEL=${{ vars.IMAGE_MODEL }},VIDEO_PRIVACY_STATUS=${{ vars.VIDEO_PRIVACY_STATUS }},TOPIC_TAGS=${{ vars.TOPIC_TAGS }},NUM_IMAGES=${{ vars.NUM_IMAGES }},TARGET_SECONDS=${{ vars.TARGET_SECONDS }}
+
+      - name: Get Function URL
+        id: geturl
+        env:
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+        run: |
+          URL=$(gcloud functions describe generateVideo --gen2 --region=$GCP_REGION --format='value(serviceConfig.uri)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      - name: Create or Update Cloud Scheduler job
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+          SCHEDULE: ${{ vars.VIDEO_CRON_SCHEDULE }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          JOB_NAME=post-ai-video
+          FUNCTION_URL=${{ steps.geturl.outputs.url }}
+
+          # Determine Scheduler SA (the default compute service account works; customize if needed)
+          SCHED_SA=${{ secrets.SCHEDULER_SA_EMAIL }}
+          if [ -z "$SCHED_SA" ]; then
+            SCHED_SA=$(gcloud iam service-accounts list --format='value(email)' | head -n1)
+          fi
+
+          set -e
+          if gcloud scheduler jobs describe $JOB_NAME --location=$GCP_REGION >/dev/null 2>&1; then
+            gcloud scheduler jobs update http $JOB_NAME \
+              --location=$GCP_REGION \
+              --schedule="$SCHEDULE" \
+              --uri="$FUNCTION_URL" \
+              --http-method=GET \
+              --oidc-service-account-email="$SCHED_SA" \
+              --oidc-token-audience="$FUNCTION_URL" \
+              --headers="x-cron-secret=$CRON_SECRET"
+          else
+            gcloud scheduler jobs create http $JOB_NAME \
+              --location=$GCP_REGION \
+              --schedule="$SCHEDULE" \
+              --uri="$FUNCTION_URL" \
+              --http-method=GET \
+              --oidc-service-account-email="$SCHED_SA" \
+              --oidc-token-audience="$FUNCTION_URL" \
+              --headers="x-cron-secret=$CRON_SECRET"
+          fi
+
+      - name: Grant invoker to Scheduler SA
+        env:
+          GCP_REGION: ${{ secrets.GCP_REGION }}
+        run: |
+          FUNCTION_SERVICE=$(gcloud functions describe generateVideo --gen2 --region=$GCP_REGION --format='value(serviceConfig.service)')
+          SCHED_SA=${{ secrets.SCHEDULER_SA_EMAIL }}
+          if [ -z "$SCHED_SA" ]; then
+            SCHED_SA=$(gcloud iam service-accounts list --format='value(email)' | head -n1)
+          fi
+          gcloud run services add-iam-policy-binding $FUNCTION_SERVICE \
+            --region=$GCP_REGION \
+            --member=serviceAccount:$SCHED_SA \
+            --role=roles/run.invoker
