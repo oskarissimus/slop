@@ -1,5 +1,8 @@
+from slop.cli import app
+
+
 def main():
-    print("Hello from slop!")
+    app()
 
 
 if __name__ == "__main__":
