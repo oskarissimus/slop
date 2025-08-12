@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from .config import AppConfig, write_default_config
 from .pipeline import generate_video_pipeline
 from .youtube_uploader import YouTubeUploader, UploadMetadata
+from .utils import sanitize_title
 
 
 console = Console()
@@ -66,7 +67,7 @@ def _default(
 
     if upload:
         try:
-            resolved_title = title or result.topic
+            resolved_title = sanitize_title(title) if title else result.topic
             tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
             uploader = YouTubeUploader(credentials_dir=Path(credentials_dir))
             metadata = UploadMetadata(
@@ -120,7 +121,7 @@ def run_once(
 
     if upload:
         try:
-            resolved_title = title or result.topic
+            resolved_title = sanitize_title(title) if title else result.topic
             tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
             uploader = YouTubeUploader(credentials_dir=Path(credentials_dir))
             metadata = UploadMetadata(

@@ -8,6 +8,7 @@ from rich.console import Console
 
 from .config import AppConfig
 from .pipeline import generate_video_pipeline
+from .utils import sanitize_title
 from .youtube_uploader import YouTubeUploader, UploadMetadata
 
 
@@ -51,7 +52,7 @@ def generate_and_upload(
     result = generate_video_pipeline(config=config, output_dir=output_dir)
     console.print(f"[green]Generated video: {result.video_path}")
 
-    title = result.topic
+    title = sanitize_title(result.topic)
     uploader = YouTubeUploader(credentials_dir=credentials_dir)
     metadata = UploadMetadata(
         title=title,
