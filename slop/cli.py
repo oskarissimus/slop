@@ -46,7 +46,7 @@ def _default(
     description: str = typer.Option("", help="YouTube description"),
     tags: Optional[str] = typer.Option(None, help="Comma-separated YouTube tags"),
     category_id: int = typer.Option(22, help="YouTube category ID (default 22: People & Blogs)"),
-    privacy_status: str = typer.Option("private", help="YouTube privacy: public | unlisted | private"),
+    privacy_status: str = typer.Option("public", help="YouTube privacy: public | unlisted | private"),
     thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to thumbnail image"),
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
 ) -> None:
@@ -107,7 +107,7 @@ def run_once(
     description: str = typer.Option("", help="YouTube description"),
     tags: Optional[str] = typer.Option(None, help="Comma-separated YouTube tags"),
     category_id: int = typer.Option(22, help="YouTube category ID (default 22: People & Blogs)"),
-    privacy_status: str = typer.Option("private", help="YouTube privacy: public | unlisted | private"),
+    privacy_status: str = typer.Option("public", help="YouTube privacy: public | unlisted | private"),
     thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to thumbnail image"),
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
 ) -> None:

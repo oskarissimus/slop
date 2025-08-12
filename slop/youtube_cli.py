@@ -26,7 +26,7 @@ def upload(
     description: str = typer.Option("", help="Video description"),
     tags: Optional[str] = typer.Option(None, help="Comma-separated list of tags"),
     category_id: int = typer.Option(22, help="YouTube category ID (default 22: People & Blogs)"),
-    privacy_status: str = typer.Option("private", help="public | unlisted | private"),
+    privacy_status: str = typer.Option("public", help="public | unlisted | private"),
     thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to a thumbnail image"),
     credentials_dir: str = typer.Option(
         str(Path.cwd()),

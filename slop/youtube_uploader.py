@@ -26,7 +26,7 @@ class UploadMetadata:
     description: str = ""
     tags: Optional[Iterable[str]] = None
     category_id: str = "22"
-    privacy_status: str = "private"  # public | unlisted | private
+    privacy_status: str = "public"  # public | unlisted | private
 
 
 class YouTubeUploader:
@@ -82,7 +82,10 @@ class YouTubeUploader:
                 "tags": list(metadata.tags) if metadata.tags else None,
                 "categoryId": metadata.category_id,
             },
-            "status": {"privacyStatus": metadata.privacy_status},
+            "status": {
+                "privacyStatus": metadata.privacy_status,
+                "selfDeclaredMadeForKids": False,
+            },
         }
 
         request = youtube.videos().insert(
