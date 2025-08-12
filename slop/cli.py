@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from .config import AppConfig, write_default_config
 from .pipeline import generate_video_pipeline
+from .youtube_uploader import YouTubeUploader, UploadMetadata
 
 
 console = Console()
@@ -39,6 +40,14 @@ def _default(
     ctx: typer.Context,
     config_path: str = typer.Option("slop_app_config.py", help="Path to config"),
     output_dir: str = typer.Option("outputs", help="Directory for outputs"),
+    upload: bool = typer.Option(False, help="Upload the generated video to YouTube"),
+    title: Optional[str] = typer.Option(None, help="YouTube title (defaults to file name)"),
+    description: str = typer.Option("", help="YouTube description"),
+    tags: Optional[str] = typer.Option(None, help="Comma-separated YouTube tags"),
+    category_id: int = typer.Option(22, help="YouTube category ID (default 22: People & Blogs)"),
+    privacy_status: str = typer.Option("private", help="YouTube privacy: public | unlisted | private"),
+    thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to thumbnail image"),
+    credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
 ) -> None:
     """If no command is provided, run one-off generation with defaults."""
     ensure_env_loaded()
@@ -55,6 +64,25 @@ def _default(
     output_path = generate_video_pipeline(config=config, output_dir=Path(output_dir))
     console.print(f"[green]Generated video: {output_path}")
 
+    if upload:
+        try:
+            resolved_title = title or Path(output_path).stem
+            tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+            uploader = YouTubeUploader(credentials_dir=Path(credentials_dir))
+            metadata = UploadMetadata(
+                title=resolved_title,
+                description=description,
+                tags=tag_list,
+                category_id=str(category_id),
+                privacy_status=privacy_status,
+            )
+            video_id = uploader.upload_video(video_path=Path(output_path), metadata=metadata)
+            if thumbnail_path:
+                uploader.set_thumbnail(video_id=video_id, thumbnail_path=Path(thumbnail_path))
+            console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
+        except Exception as e:
+            console.print(f"[red]YouTube upload failed: {e}")
+
 
 @app.command()
 def init(config_path: str = typer.Option("slop_app_config.py", help="Where to write default config")) -> None:
@@ -70,8 +98,18 @@ def init(config_path: str = typer.Option("slop_app_config.py", help="Where to wr
 
 
 @app.command()
-def run_once(config_path: str = typer.Option("slop_app_config.py", help="Path to config"),
-             output_dir: str = typer.Option("outputs", help="Directory for outputs")) -> None:
+def run_once(
+    config_path: str = typer.Option("slop_app_config.py", help="Path to config"),
+    output_dir: str = typer.Option("outputs", help="Directory for outputs"),
+    upload: bool = typer.Option(False, help="Upload the generated video to YouTube"),
+    title: Optional[str] = typer.Option(None, help="YouTube title (defaults to file name)"),
+    description: str = typer.Option("", help="YouTube description"),
+    tags: Optional[str] = typer.Option(None, help="Comma-separated YouTube tags"),
+    category_id: int = typer.Option(22, help="YouTube category ID (default 22: People & Blogs)"),
+    privacy_status: str = typer.Option("private", help="YouTube privacy: public | unlisted | private"),
+    thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to thumbnail image"),
+    credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
+) -> None:
     """Generate a single two-minute video now."""
     ensure_env_loaded()
     validate_required_env()
@@ -79,6 +117,25 @@ def run_once(config_path: str = typer.Option("slop_app_config.py", help="Path to
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     output_path = generate_video_pipeline(config=config, output_dir=Path(output_dir))
     console.print(f"[green]Generated video: {output_path}")
+
+    if upload:
+        try:
+            resolved_title = title or Path(output_path).stem
+            tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+            uploader = YouTubeUploader(credentials_dir=Path(credentials_dir))
+            metadata = UploadMetadata(
+                title=resolved_title,
+                description=description,
+                tags=tag_list,
+                category_id=str(category_id),
+                privacy_status=privacy_status,
+            )
+            video_id = uploader.upload_video(video_path=Path(output_path), metadata=metadata)
+            if thumbnail_path:
+                uploader.set_thumbnail(video_id=video_id, thumbnail_path=Path(thumbnail_path))
+            console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
+        except Exception as e:
+            console.print(f"[red]YouTube upload failed: {e}")
 
 
 
