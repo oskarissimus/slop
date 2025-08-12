@@ -1,0 +1,52 @@
+name: slop-daily
+
+on:
+  schedule:
+    - cron: "0 9 * * *" # 09:00 UTC daily
+  workflow_dispatch:
+
+concurrency:
+  group: slop-daily
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install Python 3.11 via uv
+        run: uv python install 3.11
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Prepare YouTube OAuth credentials
+        run: |
+          mkdir -p ./.youtube
+          # These are JSON contents stored in GitHub Secrets
+          echo '${{ secrets.YT_CLIENT_SECRET_JSON }}' > ./.youtube/client_secret.json
+          echo '${{ secrets.YT_TOKEN_JSON }}' > ./.youtube/token.json
+
+      - name: Install dependencies
+        run: uv sync --python 3.11 --frozen
+
+      - name: Generate and upload
+        run: uv run --python 3.11 slop run-once --upload --credentials-dir ./.youtube --output-dir outputs
+
+      - name: Upload artifact (latest video)
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-video
+          path: outputs/*.mp4
+          if-no-files-found: ignore
+
+
