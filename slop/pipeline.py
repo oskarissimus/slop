@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
@@ -12,7 +13,14 @@ from .voice import synthesize_voice
 from .stitch import stitch_video
 
 
-def generate_video_pipeline(config: AppConfig, output_dir: Path) -> Path:
+@dataclass
+class GeneratedVideo:
+    video_path: Path
+    topic: str
+    script_text: str
+
+
+def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVideo:
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     basename = f"video_{timestamp}"
@@ -38,6 +46,6 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> Path:
         fps=config.fps,
     )
 
-    return video_path
+    return GeneratedVideo(video_path=video_path, topic=topic, script_text=script_text)
 
 

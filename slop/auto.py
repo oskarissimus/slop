@@ -48,10 +48,10 @@ def generate_and_upload(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     config = AppConfig.load(config_path)
-    video_path = generate_video_pipeline(config=config, output_dir=output_dir)
-    console.print(f"[green]Generated video: {video_path}")
+    result = generate_video_pipeline(config=config, output_dir=output_dir)
+    console.print(f"[green]Generated video: {result.video_path}")
 
-    title = Path(video_path).stem
+    title = result.topic
     uploader = YouTubeUploader(credentials_dir=credentials_dir)
     metadata = UploadMetadata(
         title=title,
@@ -60,7 +60,7 @@ def generate_and_upload(
         category_id="22",
         privacy_status=privacy_status,
     )
-    video_id = uploader.upload_video(video_path=Path(video_path), metadata=metadata)
+    video_id = uploader.upload_video(video_path=Path(result.video_path), metadata=metadata)
     console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
     return video_id
 

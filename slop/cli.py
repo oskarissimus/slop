@@ -41,7 +41,7 @@ def _default(
     config_path: str = typer.Option("slop_app_config.py", help="Path to config"),
     output_dir: str = typer.Option("outputs", help="Directory for outputs"),
     upload: bool = typer.Option(False, help="Upload the generated video to YouTube"),
-    title: Optional[str] = typer.Option(None, help="YouTube title (defaults to file name)"),
+    title: Optional[str] = typer.Option(None, help="YouTube title (defaults to generated topic)"),
     description: str = typer.Option("", help="YouTube description"),
     tags: Optional[str] = typer.Option(None, help="Comma-separated YouTube tags"),
     category_id: int = typer.Option(22, help="YouTube category ID (default 22: People & Blogs)"),
@@ -61,12 +61,12 @@ def _default(
         console.print(f"[yellow]No config found. Wrote default to {target}")
     config = AppConfig.load(target)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    output_path = generate_video_pipeline(config=config, output_dir=Path(output_dir))
-    console.print(f"[green]Generated video: {output_path}")
+    result = generate_video_pipeline(config=config, output_dir=Path(output_dir))
+    console.print(f"[green]Generated video: {result.video_path}")
 
     if upload:
         try:
-            resolved_title = title or Path(output_path).stem
+            resolved_title = title or result.topic
             tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
             uploader = YouTubeUploader(credentials_dir=Path(credentials_dir))
             metadata = UploadMetadata(
@@ -76,7 +76,7 @@ def _default(
                 category_id=str(category_id),
                 privacy_status=privacy_status,
             )
-            video_id = uploader.upload_video(video_path=Path(output_path), metadata=metadata)
+            video_id = uploader.upload_video(video_path=Path(result.video_path), metadata=metadata)
             if thumbnail_path:
                 uploader.set_thumbnail(video_id=video_id, thumbnail_path=Path(thumbnail_path))
             console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
@@ -102,7 +102,7 @@ def run_once(
     config_path: str = typer.Option("slop_app_config.py", help="Path to config"),
     output_dir: str = typer.Option("outputs", help="Directory for outputs"),
     upload: bool = typer.Option(False, help="Upload the generated video to YouTube"),
-    title: Optional[str] = typer.Option(None, help="YouTube title (defaults to file name)"),
+    title: Optional[str] = typer.Option(None, help="YouTube title (defaults to generated topic)"),
     description: str = typer.Option("", help="YouTube description"),
     tags: Optional[str] = typer.Option(None, help="Comma-separated YouTube tags"),
     category_id: int = typer.Option(22, help="YouTube category ID (default 22: People & Blogs)"),
@@ -115,12 +115,12 @@ def run_once(
     validate_required_env()
     config = AppConfig.load(Path(config_path))
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    output_path = generate_video_pipeline(config=config, output_dir=Path(output_dir))
-    console.print(f"[green]Generated video: {output_path}")
+    result = generate_video_pipeline(config=config, output_dir=Path(output_dir))
+    console.print(f"[green]Generated video: {result.video_path}")
 
     if upload:
         try:
-            resolved_title = title or Path(output_path).stem
+            resolved_title = title or result.topic
             tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
             uploader = YouTubeUploader(credentials_dir=Path(credentials_dir))
             metadata = UploadMetadata(
@@ -130,7 +130,7 @@ def run_once(
                 category_id=str(category_id),
                 privacy_status=privacy_status,
             )
-            video_id = uploader.upload_video(video_path=Path(output_path), metadata=metadata)
+            video_id = uploader.upload_video(video_path=Path(result.video_path), metadata=metadata)
             if thumbnail_path:
                 uploader.set_thumbnail(video_id=video_id, thumbnail_path=Path(thumbnail_path))
             console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
