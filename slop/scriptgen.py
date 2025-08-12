@@ -29,3 +29,4 @@ def generate_script(topic: str, personality: Personality, target_duration_second
     return response.choices[0].message.content.strip()
 
 
+

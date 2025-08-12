@@ -29,3 +29,4 @@ def generate_topic(personality: Personality) -> str:
     return response.choices[0].message.content.strip()
 
 
+
