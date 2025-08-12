@@ -14,10 +14,15 @@ dependencies = [
     "Pillow>=10.3.0",
     "requests>=2.32.3",
     "tenacity>=8.3.0",
+    "google-api-python-client>=2.136.0",
+    "google-auth>=2.31.0",
+    "google-auth-oauthlib>=1.2.0",
+    "google-auth-httplib2>=0.2.0",
 ]
 
 [project.scripts]
 slop = "slop.cli:app"
+slop-youtube = "slop.youtube_cli:app"
 
 [tool.uv]
 package = true
