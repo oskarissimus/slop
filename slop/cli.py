@@ -24,8 +24,8 @@ def validate_required_env() -> None:
     missing = []
     if not os.getenv("OPENAI_API_KEY"):
         missing.append("OPENAI_API_KEY")
-    if not (os.getenv("ELEVENLABS_API_KEY") or os.getenv("ELEVEN_API_KEY")):
-        missing.append("ELEVENLABS_API_KEY or ELEVEN_API_KEY")
+    if not os.getenv("ELEVENLABS_API_KEY"):
+        missing.append("ELEVENLABS_API_KEY")
     if missing:
         typer.secho(
             "Missing required env vars: " + ", ".join(missing) +

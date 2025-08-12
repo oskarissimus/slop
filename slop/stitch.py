@@ -2,17 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import List
-import os
 import subprocess
 import tempfile
 
 
 def _ffmpeg_bin() -> str:
-    return os.getenv("FFMPEG_BINARY") or "ffmpeg"
+    return "ffmpeg"
 
 
 def _ffprobe_bin() -> str:
-    return os.getenv("FFPROBE_BINARY") or "ffprobe"
+    return "ffprobe"
 
 
 def stitch_video(
@@ -43,11 +42,7 @@ def stitch_video(
         result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
         audio_duration = float((result.stdout or "").strip())
     except Exception:
-        fallback = os.getenv("SLOP_FALLBACK_DURATION", "120")
-        try:
-            audio_duration = float(fallback)
-        except ValueError:
-            audio_duration = 120.0
+        audio_duration = 120.0
     duration_per_image = max(0.1, audio_duration / total_images)
 
     with tempfile.TemporaryDirectory() as tmpdir:

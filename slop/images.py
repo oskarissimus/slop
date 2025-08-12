@@ -6,7 +6,6 @@ from typing import List
 from PIL import Image, ImageDraw, ImageFont
 from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import OpenAI
-import os
 
 
 def _fallback_generate_placeholder(text: str, output_dir: Path, index: int) -> Path:
@@ -62,7 +61,7 @@ def generate_images(script_text: str, num_images: int, output_dir: Path, provide
     prompts = split_script_into_prompts(script_text, num_images)
     image_paths: List[Path] = []
     for i, p in enumerate(prompts):
-        if provider == "openai" and os.getenv("OPENAI_API_KEY") and os.getenv("SLOP_MOCK_IMAGES", "0") in ("0", "false", "False", ""):
+        if provider == "openai":
             try:
                 image_paths.append(_generate_single_image_openai(p, i, output_dir))
             except Exception:
