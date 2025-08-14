@@ -16,12 +16,13 @@ def generate_topic(personality: Personality) -> str:
         "Jesteś asystentem tworzącym tematy krótkich pionowych wideo. Na podstawie persony "
         "zaproponuj jeden, chwytliwy i konkretny tytuł po polsku, odpowiedni dla ~2-minutowego materiału. "
         f"Persona: {personality.name}. Opis: {personality.description}. "
-        "Unikaj ogólników. Zwróć tylko tytuł, bez cudzysłowów."
+        "Tematyka: gawędy sarmackie, dawna Rzeczpospolita, losy i przygody szlachcica, podróże, potyczki, obyczaje, "
+        "anegdoty, etos i koloryt epoki. Unikaj ogólników. Zwróć tylko tytuł, bez cudzysłowów."
     )
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "Tworzysz zwięzłe, angażujące polskie tytuły do krótkich wideo."},
+            {"role": "system", "content": "Tworzysz zwięzłe, angażujące polskie tytuły do krótkich wideo o tematyce sarmackich gawęd."},
             {"role": "user", "content": prompt},
         ],
         temperature=0.9,
