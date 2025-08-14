@@ -12,15 +12,17 @@ def generate_script(topic: str, personality: Personality, target_duration_second
     words_per_second = 2.5  # conservative speaking rate
     target_words = int(target_duration_seconds * words_per_second)
     prompt = (
-        f"Write a voiceover script for a short-form vertical video about: '{topic}'. "
-        f"Persona: {personality.name} ({personality.speaking_style}). {personality.description}. "
-        f"Aim for around {target_words} words. Use simple, vivid language, natural pacing, and end with a brief closing line. "
-        "Do not include scene directions or timestamps."
+        f"Napisz po polsku scenariusz lektorski do krótkiego, pionowego wideo na temat: '{topic}'. "
+        "Styl: Jan Chryzostom Pasek (barokowa sarmacka gawęda, narracja pierwszoosobowa, obrazowe anegdoty, "
+        "lekko archaiczne słownictwo, ale zrozumiałe dla współczesnego odbiorcy). "
+        f"Persona narratora: {personality.name} ({personality.speaking_style}). {personality.description}. "
+        f"Długość około {target_words} słów. Używaj żywych, konkretnych obrazów, naturalnego tempa; zakończ krótką klamrą. "
+        "Nie dodawaj kierunków scenicznych ani znaczników czasu."
     )
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You write concise, engaging 2-minute scripts."},
+            {"role": "system", "content": "Piszesz zwięzłe, angażujące, około 2-minutowe skrypty lektorskie po polsku w stylistyce Jana Chryzostoma Paska."},
             {"role": "user", "content": prompt},
         ],
         temperature=0.8,

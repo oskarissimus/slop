@@ -8,10 +8,10 @@ CONFIG = {
     "num_images": 12,
     "image_provider": "openai",
     "personality": {
-        "name": "Curious Explorer",
-        "description": "An upbeat, inquisitive narrator who explains concepts simply and vividly, with curiosity, positivity, and gentle humor.",
-        "speaking_style": "warm, lively, friendly",
-        "voice_id": "21m00Tcm4TlvDq8ikWAM"
+        "name": "Sarmacki Gawędziarz",
+        "description": "Ciepły, niski, męski głos starego szlachcica-gawędziarza; barwne anegdoty, serdeczny ton, dystyngowana swada, lekka ironia.",
+        "speaking_style": "ciepły, niski, spokojny, gawędziarski, ojcowski",
+        "voice_id": "pNInz6obpgDQGcFmaJgB"
     },
     "schedule": {
         "cron": "0 9 * * *"
