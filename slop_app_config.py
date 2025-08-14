@@ -6,7 +6,7 @@ CONFIG = {
     "resolution_width": 1080,
     "resolution_height": 1920,
     "num_images": 12,
-    "image_provider": "openai",
+    "image_provider": "openai",  # uses Cursor env secret OPENAI_API_KEY
     "personality": {
         "name": "Sarmacki Gawędziarz",
         "description": "Ciepły, niski, męski głos starego szlachcica-gawędziarza; barwne anegdoty, serdeczny ton, dystyngowana swada, lekka ironia.",
