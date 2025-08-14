@@ -8,7 +8,7 @@ from .config import Personality
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3))
 def generate_script(topic: str, personality: Personality, target_duration_seconds: int) -> str:
-    client = OpenAI()
+    client = OpenAI()  # picks up OPENAI_API_KEY from env
     words_per_second = 2.5  # conservative speaking rate
     target_words = int(target_duration_seconds * words_per_second)
     prompt = (

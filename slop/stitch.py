@@ -66,7 +66,7 @@ def stitch_video(
             "-i",
             str(list_path),
             "-vf",
-            f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},format=yuv420p",
             "-r",
             str(fps),
             "-pix_fmt",
