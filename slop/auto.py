@@ -17,6 +17,9 @@ console = Console()
 
 def _validate_required_env() -> None:
     missing = []
+    if os.getenv("SLOP_OFFLINE") == "1":
+        # In offline mode, skip API key validation
+        return
     if not os.getenv("OPENAI_API_KEY"):
         missing.append("OPENAI_API_KEY")
     if not os.getenv("ELEVENLABS_API_KEY"):

@@ -24,6 +24,8 @@ def ensure_env_loaded() -> None:
 
 
 def validate_required_env() -> None:
+    if os.getenv("SLOP_OFFLINE") == "1":
+        return
     missing = []
     if not os.getenv("OPENAI_API_KEY"):
         missing.append("OPENAI_API_KEY")
@@ -144,8 +146,8 @@ def run_once(
 def _test_openai(message: str = typer.Option("Say hello", help="Prompt to send to the model")) -> None:
     """Internal: Send a single message to the chat API to observe rate limit headers and fallback."""
     ensure_env_loaded()
-    if not os.getenv("OPENAI_API_KEY"):
-        console.print("[red]OPENAI_API_KEY missing in environment. Add it to .env.")
+    if not os.getenv("OPENAI_API_KEY") and os.getenv("SLOP_OFFLINE") != "1":
+        console.print("[red]OPENAI_API_KEY missing in environment. Add it to .env or set SLOP_OFFLINE=1.")
         raise typer.Exit(code=1)
     content, used_model = chat_completion_with_fallback(
         messages=[
