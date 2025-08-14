@@ -13,15 +13,15 @@ from .utils import sanitize_title
 def generate_topic(personality: Personality) -> str:
     client = OpenAI()
     prompt = (
-        "You are an assistant creating short-form video topics. Given a persona,"
-        " return a single catchy, specific topic title suitable for a 2-minute video."
-        f" Persona: {personality.name}. Description: {personality.description}."
-        " Avoid generic titles. Make it concrete. Return only the title."
+        "Jesteś asystentem tworzącym tematy krótkich pionowych wideo. Na podstawie persony "
+        "zaproponuj jeden, chwytliwy i konkretny tytuł po polsku, odpowiedni dla ~2-minutowego materiału. "
+        f"Persona: {personality.name}. Opis: {personality.description}. "
+        "Unikaj ogólników. Zwróć tylko tytuł, bez cudzysłowów."
     )
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You create concise, engaging video topics."},
+            {"role": "system", "content": "Tworzysz zwięzłe, angażujące polskie tytuły do krótkich wideo."},
             {"role": "user", "content": prompt},
         ],
         temperature=0.9,
