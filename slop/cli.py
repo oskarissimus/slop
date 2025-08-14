@@ -12,6 +12,7 @@ from .config import AppConfig, write_default_config
 from .pipeline import generate_video_pipeline
 from .youtube_uploader import YouTubeUploader, UploadMetadata
 from .utils import sanitize_title
+from .openai_utils import chat_completion_with_fallback
 
 
 console = Console()
@@ -137,6 +138,24 @@ def run_once(
             console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
         except Exception as e:
             console.print(f"[red]YouTube upload failed: {e}")
+
+
+@app.command(hidden=True)
+def _test_openai(message: str = typer.Option("Say hello", help="Prompt to send to the model")) -> None:
+    """Internal: Send a single message to the chat API to observe rate limit headers and fallback."""
+    ensure_env_loaded()
+    if not os.getenv("OPENAI_API_KEY"):
+        console.print("[red]OPENAI_API_KEY missing in environment. Add it to .env.")
+        raise typer.Exit(code=1)
+    content, used_model = chat_completion_with_fallback(
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": message},
+        ],
+        temperature=0.2,
+        max_tokens=64,
+    )
+    console.print(f"[green]Model {used_model} responded: {content}")
 
 
 

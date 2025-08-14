@@ -6,7 +6,12 @@ from typing import List, Tuple
 
 from PIL import Image, ImageDraw, ImageFont
 from tenacity import retry, stop_after_attempt, wait_exponential
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError, APIStatusError
+from rich.console import Console
+from .openai_utils import _log_rate_limit_headers
+
+
+console = Console()
 
 
 def _fallback_generate_placeholder(text: str, output_dir: Path, index: int) -> Path:
@@ -26,13 +31,29 @@ def _fallback_generate_placeholder(text: str, output_dir: Path, index: int) -> P
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3))
 async def _generate_single_image_openai_async(client: AsyncOpenAI, prompt: str, index: int, output_dir: Path) -> Path:
-    resp = await client.images.generate(
-        model="gpt-image-1",
-        prompt=prompt,
-        size="1024x1024",
-        quality="high",
-        n=1,
-    )
+    try:
+        resp = await client.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            size="1024x1024",
+            quality="high",
+            n=1,
+        )
+    except RateLimitError as e:
+        console.print("[red]Rate limited on gpt-image-1 for image generation[/red]")
+        try:
+            _log_rate_limit_headers(getattr(e, "response", None).headers, prefix="[gpt-image-1] ")
+        except Exception:
+            pass
+        raise
+    except APIStatusError as e:
+        console.print(f"[red]OpenAI API error for image generation: HTTP {getattr(e, 'status_code', 'unknown')}[/red]")
+        try:
+            _log_rate_limit_headers(getattr(e, "response", None).headers, prefix="[gpt-image-1] ")
+        except Exception:
+            pass
+        raise
+
     import base64
     b64 = resp.data[0].b64_json
     img_bytes = base64.b64decode(b64)
