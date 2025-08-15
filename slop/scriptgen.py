@@ -16,6 +16,9 @@ def generate_script(topic: str, personality: Personality, target_duration_second
         "Styl: Jan Chryzostom Pasek (barokowa sarmacka gawęda, narracja pierwszoosobowa, obrazowe anegdoty, "
         "lekko archaiczne słownictwo, ale zrozumiałe dla współczesnego odbiorcy). "
         f"Persona narratora: {personality.name} ({personality.speaking_style}). {personality.description}. "
+        "Treść scenariusza ma fabularnie odtwarzać historię znaną z piosenki Franka Zappy 'Don't Eat the Yellow Snow' — "
+        "nie cytuj ani nie tłumacz słów piosenki; opowiadaj własnymi słowami, zachowując kluczowe motywy: sen o byciu Eskimosem, trzaskający mróz, "
+        "zorza polarna, matczyna przestroga, wskazówka by strzec się żółtego śniegu, humorystyczny ton. "
         f"Długość około {target_words} słów. Używaj żywych, konkretnych obrazów, naturalnego tempa; zakończ krótką klamrą. "
         "Nie dodawaj kierunków scenicznych ani znaczników czasu."
     )
