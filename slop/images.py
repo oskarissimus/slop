@@ -7,6 +7,8 @@ from typing import List, Tuple
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import AsyncOpenAI
+import json
+import re
 
 
 def _fallback_generate_placeholder(text: str, output_dir: Path, index: int) -> Path:
@@ -87,6 +89,63 @@ def split_script_into_prompts(script_text: str, num_images: int) -> List[str]:
 	return selected
 
 
+def _extract_json_array(text: str) -> str:
+	"""Extract a top-level JSON array from free-form text, stripping code fences if present."""
+	# Remove common code fences
+	clean = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.MULTILINE)
+	# Find the first [ ... ] block
+	start = clean.find("[")
+	end = clean.rfind("]")
+	if start != -1 and end != -1 and end > start:
+		return clean[start : end + 1]
+	return clean
+
+
+async def _generate_storyboard_prompts_llm_async(script_text: str, num_images: int) -> List[dict]:
+	"""Single-call storyboard prompt generation enforcing cross-frame continuity.
+
+	Returns a list of dicts with at least a "prompt" key.
+	"""
+	client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+	system_msg = (
+		"Jesteś doświadczonym storyboardzistą i art directorem. Tworzysz spójny zestaw opisów kadrów do pionowego wideo 9:16. "
+		"Zachowujesz ciągłość postaci, rekwizytów, palety kolorów, epoki i nastroju między kolejnymi ujęciami. "
+		"Nigdy nie umieszczasz tekstu na obrazie. Skupiasz się na fotorealizmie i filmowej kompozycji."
+	)
+	user_msg = (
+		"Na podstawie poniższego skryptu przygotuj listę {n} spójnych kadrów (beats), które opowiadają historię od początku do końca. "
+		"Każdy element listy powinien zawierać klucz 'prompt' (1–3 zdania po polsku, bez żadnego tekstu na obrazie) oraz krótkie 'continuity' (co utrzymać: bohater, strój, rekwizyty, pora dnia, paleta, miejsce). "
+		"Zwróć WYŁĄCZNIE poprawny JSON: tablicę {n} obiektów. Bez komentarzy i bez dodatkowego tekstu.\n\n"
+		f"Skrypt:\n{script}\n\n"
+		"Wymagania wizualne dla każdego kadru: pion 9:16, pełny kadr, brak ramek, brak czarnych pasów, naturalne światło filmowe, wysoki realizm skóry i materiałów, brak znaków wodnych."
+	).format(n=num_images, script=script_text)
+
+	resp = await client.chat.completions.create(
+		model="gpt-4o-mini",
+		messages=[
+			{"role": "system", "content": system_msg},
+			{"role": "user", "content": user_msg},
+		],
+		temperature=0.5,
+		max_tokens=2000,
+	)
+	content = (resp.choices[0].message.content or "").strip()
+	json_text = _extract_json_array(content)
+	data = json.loads(json_text)
+	if not isinstance(data, list):
+		raise ValueError("Storyboard response is not a list")
+	# Normalize to list of dicts with 'prompt' and optional 'continuity'
+	normalized: List[dict] = []
+	for item in data:
+		if isinstance(item, dict):
+			prompt_text = item.get("prompt") or item.get("scene") or item.get("description") or ""
+			continuity = item.get("continuity") or item.get("notes") or ""
+			normalized.append({"prompt": str(prompt_text).strip(), "continuity": str(continuity).strip(), "raw": item})
+		else:
+			normalized.append({"prompt": str(item).strip(), "continuity": "", "raw": item})
+	return normalized
+
+
 async def _describe_scenes_with_llm_async(script_chunks: List[str]) -> List[str]:
 	"""Turn each script chunk into a detailed, hyperrealistic, text-free image prompt in Polish.
 
@@ -140,14 +199,42 @@ async def _describe_scenes_with_llm_async(script_chunks: List[str]) -> List[str]
 
 def generate_images(script_text: str, num_images: int, output_dir: Path, provider: str = "openai") -> List[Path]:
 	output_dir.mkdir(parents=True, exist_ok=True)
-	script_chunks = split_script_into_prompts(script_text, num_images)
-
-	# First stage: get LLM scene descriptions for each chunk
+	# Prefer a single-call cohesive storyboard for continuity
 	try:
-		scene_prompts = asyncio.run(_describe_scenes_with_llm_async(script_chunks))
+		storyboard_items = asyncio.run(_generate_storyboard_prompts_llm_async(script_text=script_text, num_images=num_images))
+		# Trim/pad to requested length
+		if len(storyboard_items) < num_images:
+			last = storyboard_items[-1] if storyboard_items else {"prompt": script_text, "continuity": ""}
+			while len(storyboard_items) < num_images:
+				storyboard_items.append(last)
+		elif len(storyboard_items) > num_images:
+			storyboard_items = storyboard_items[:num_images]
+		# Build final prompts with unified visual constraints and continuity note
+		unified_prefix = (
+			"Fotorealistyczna fotografia, brak tekstu, brak napisów, brak znaków wodnych. "
+			"Bardzo szczegółowe, naturalne światło filmowe, wysoki realizm skóry i materiałów, głębia ostrości. "
+			"Kompozycja pionowa 9:16, pełny kadr (full-bleed), bez ramek i bez czarnych pasów (bez letterboxingu). "
+		)
+		scene_prompts = []
+		for it in storyboard_items:
+			core = it.get("prompt", "").strip()
+			cont = it.get("continuity", "").strip()
+			continuity_hint = f" Zachowaj ciągłość: {cont}." if cont else ""
+			scene_prompts.append(unified_prefix + f"Scena: {core}." + continuity_hint)
+		# Save storyboard JSON for debugging
+		try:
+			with open(output_dir / "storyboard.json", "w", encoding="utf-8") as f:
+				json.dump(storyboard_items, f, ensure_ascii=False, indent=2)
+		except Exception:
+			pass
 	except Exception:
-		# Fallback: use raw chunks as scene prompts if LLM unavail
-		scene_prompts = script_chunks
+		# Fallback path: split and describe per chunk
+		script_chunks = split_script_into_prompts(script_text, num_images)
+		try:
+			scene_prompts = asyncio.run(_describe_scenes_with_llm_async(script_chunks))
+		except Exception:
+			# Second fallback: use raw chunks directly
+			scene_prompts = script_chunks
 
 	# Save prompts for debugging
 	try:
