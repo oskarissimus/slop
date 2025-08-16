@@ -37,6 +37,7 @@ def generate_and_upload(
 ) -> str:
     """Generate a video and upload it to YouTube using sensible defaults.
 
+    Respects env overrides and optional PROMPT provided via CI/manual workflow.
     Returns the uploaded YouTube video ID.
     """
     load_dotenv()
