@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import List, Optional
+import os
 
 from pydantic import BaseModel, Field
 
@@ -28,6 +29,16 @@ class AppConfig(BaseModel):
     image_provider: str = "placeholder"  # placeholder | openai
     personality: Personality = Personality()
 
+    # Runtime/model knobs (production defaults mirror current behavior)
+    environment_mode: str = Field(default_factory=lambda: os.getenv("SLOP_MODE", "production"))  # production | test
+    chat_model: str = Field(default_factory=lambda: os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"))
+    scene_llm_model: str = Field(default_factory=lambda: os.getenv("OPENAI_SCENE_MODEL", "gpt-4o-mini"))
+    image_model: str = Field(default_factory=lambda: os.getenv("OPENAI_IMAGE_MODEL", "dall-e-3"))
+    image_size: str = Field(default_factory=lambda: os.getenv("OPENAI_IMAGE_SIZE", "1024x1536"))
+    image_quality: Optional[str] = Field(default_factory=lambda: os.getenv("OPENAI_IMAGE_QUALITY", "standard"))  # standard | hd | None
+    tts_model_id: str = Field(default_factory=lambda: os.getenv("ELEVENLABS_TTS_MODEL", "eleven_multilingual_v2"))
+    tts_output_format: str = Field(default_factory=lambda: os.getenv("ELEVENLABS_TTS_FORMAT", "mp3_44100_128"))
+
     @staticmethod
     def load(path: Path) -> "AppConfig":
         namespace: dict = {}
@@ -42,24 +53,70 @@ class AppConfig(BaseModel):
 def write_default_config(target_path: Path) -> None:
     target_path.write_text(
         """
-# slop config
-# Define CONFIG as a dict matching AppConfig in `slop/config.py`
-CONFIG = {
-    "duration_seconds": 120,
-    "fps": 24,
-    "resolution_width": 1080,
-    "resolution_height": 1920,
-    "num_images": 12,
-    "image_provider": "placeholder",
-    "personality": {
-        "name": "Curious Explorer",
-        "description": "An upbeat, inquisitive narrator who explains concepts simply and vividly, with curiosity, positivity, and gentle humor.",
-        "speaking_style": "warm, lively, friendly",
-        "voice_id": "21m00Tcm4TlvDq8ikWAM"
-    },
-    # Scheduling removed; generate manually via CLI
-}
-""".strip()
+    # slop config
+    # Define CONFIG as a dict matching AppConfig in `slop/config.py`
+    CONFIG = {
+        "duration_seconds": 120,
+        "fps": 24,
+        "resolution_width": 1080,
+        "resolution_height": 1920,
+        "num_images": 12,
+        "image_provider": "placeholder",
+        "personality": {
+            "name": "Curious Explorer",
+            "description": "An upbeat, inquisitive narrator who explains concepts simply and vividly, with curiosity, positivity, and gentle humor.",
+            "speaking_style": "warm, lively, friendly",
+            "voice_id": "21m00Tcm4TlvDq8ikWAM"
+        },
+        # Scheduling removed; generate manually via CLI
+    }
+    """.strip()
     )
+
+
+def apply_env_overrides(config: AppConfig) -> AppConfig:
+    """Apply environment-driven overrides for easy test/production switching.
+
+    Production remains identical to existing defaults. Test mode prioritizes lowest cost.
+    """
+    mode = os.getenv("SLOP_MODE", config.environment_mode).strip().lower()
+    config.environment_mode = mode if mode in {"production", "test"} else "production"
+
+    # Generic direct overrides (take precedence if provided)
+    config.fps = int(os.getenv("SLOP_FPS", config.fps))
+    config.resolution_width = int(os.getenv("SLOP_RESOLUTION_WIDTH", config.resolution_width))
+    config.resolution_height = int(os.getenv("SLOP_RESOLUTION_HEIGHT", config.resolution_height))
+    config.num_images = int(os.getenv("SLOP_NUM_IMAGES", config.num_images))
+    config.image_provider = os.getenv("SLOP_IMAGE_PROVIDER", config.image_provider)
+
+    config.chat_model = os.getenv("OPENAI_CHAT_MODEL", config.chat_model)
+    config.scene_llm_model = os.getenv("OPENAI_SCENE_MODEL", config.scene_llm_model)
+    config.image_model = os.getenv("OPENAI_IMAGE_MODEL", config.image_model)
+    config.image_size = os.getenv("OPENAI_IMAGE_SIZE", config.image_size)
+    config.image_quality = os.getenv("OPENAI_IMAGE_QUALITY", config.image_quality)
+    config.tts_model_id = os.getenv("ELEVENLABS_TTS_MODEL", config.tts_model_id)
+    config.tts_output_format = os.getenv("ELEVENLABS_TTS_FORMAT", config.tts_output_format)
+
+    if config.environment_mode == "test":
+        # Cheap, fast settings for CI/manual tests.
+        # Keep production-like behavior unless overridden, but reduce costs.
+        config.fps = int(os.getenv("SLOP_FPS", 12))
+        config.resolution_width = int(os.getenv("SLOP_RESOLUTION_WIDTH", 360))
+        config.resolution_height = int(os.getenv("SLOP_RESOLUTION_HEIGHT", 640))
+        config.num_images = int(os.getenv("SLOP_NUM_IMAGES", 6))
+        # Use placeholder images by default to avoid spend; allow override to 'openai'
+        config.image_provider = os.getenv("SLOP_IMAGE_PROVIDER", "placeholder")
+        # Prefer cheaper image model/size if images are enabled
+        config.image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
+        config.image_size = os.getenv("OPENAI_IMAGE_SIZE", "512x512")
+        config.image_quality = os.getenv("OPENAI_IMAGE_QUALITY", "standard")
+        # LLM tiny/cheap models
+        config.chat_model = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
+        config.scene_llm_model = os.getenv("OPENAI_SCENE_MODEL", "gpt-4o-mini")
+        # Keep TTS defaults; bitrate has minimal cost impact vs chars
+        config.tts_model_id = os.getenv("ELEVENLABS_TTS_MODEL", "eleven_multilingual_v2")
+        config.tts_output_format = os.getenv("ELEVENLABS_TTS_FORMAT", "mp3_44100_128")
+
+    return config
 
 

@@ -49,12 +49,18 @@ def _default(
     privacy_status: str = typer.Option("public", help="YouTube privacy: public | unlisted | private"),
     thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to thumbnail image"),
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
+    mode: Optional[str] = typer.Option(None, help="Override SLOP_MODE: production | test"),
+    prompt: Optional[str] = typer.Option(None, help="Override PROMPT for scenario generation"),
 ) -> None:
     """If no command is provided, run one-off generation with defaults."""
     ensure_env_loaded()
     validate_required_env()
     if ctx.invoked_subcommand is not None:
         return
+    if mode:
+        os.environ["SLOP_MODE"] = mode
+    if prompt:
+        os.environ["PROMPT"] = prompt
     target = Path(config_path)
     if not target.exists():
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -110,10 +116,16 @@ def run_once(
     privacy_status: str = typer.Option("public", help="YouTube privacy: public | unlisted | private"),
     thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to thumbnail image"),
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
+    mode: Optional[str] = typer.Option(None, help="Override SLOP_MODE: production | test"),
+    prompt: Optional[str] = typer.Option(None, help="Override PROMPT for scenario generation"),
 ) -> None:
     """Generate a single two-minute video now."""
     ensure_env_loaded()
     validate_required_env()
+    if mode:
+        os.environ["SLOP_MODE"] = mode
+    if prompt:
+        os.environ["PROMPT"] = prompt
     config = AppConfig.load(Path(config_path))
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     result = generate_video_pipeline(config=config, output_dir=Path(output_dir))

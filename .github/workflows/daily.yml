@@ -4,6 +4,13 @@ on:
   schedule:
     - cron: "0 9 * * *" # 09:00 UTC daily
   workflow_dispatch:
+    inputs:
+      prompt:
+        description: "Opis tematu (opcjonalny). Jeśli podany, zasili zmienną PROMPT."
+        required: false
+      mode:
+        description: "Tryb uruchomienia: production | test (opcjonalny, domyślnie production)"
+        required: false
 
 concurrency:
   group: slop-daily
@@ -35,6 +42,26 @@ jobs:
           # These are JSON contents stored in GitHub Secrets
           echo '${{ secrets.YT_CLIENT_SECRET_JSON }}' > ./.youtube/client_secret.json
           echo '${{ secrets.YT_TOKEN_JSON }}' > ./.youtube/token.json
+
+      - name: Propagate manual inputs to env
+        run: |
+          if [ -n "${{ github.event.inputs.prompt }}" ]; then echo "PROMPT=${{ github.event.inputs.prompt }}" >> $GITHUB_ENV; fi
+          if [ -n "${{ github.event.inputs.mode }}" ]; then echo "SLOP_MODE=${{ github.event.inputs.mode }}" >> $GITHUB_ENV; fi
+
+      - name: Configure cheap test knobs (only when SLOP_MODE=test)
+        run: |
+          if [ "${{ github.event.inputs.mode }}" = "test" ]; then
+            echo "SLOP_IMAGE_PROVIDER=placeholder" >> $GITHUB_ENV
+            echo "OPENAI_IMAGE_MODEL=gpt-image-1" >> $GITHUB_ENV
+            echo "OPENAI_IMAGE_SIZE=512x512" >> $GITHUB_ENV
+            echo "OPENAI_IMAGE_QUALITY=standard" >> $GITHUB_ENV
+            echo "OPENAI_CHAT_MODEL=gpt-4o-mini" >> $GITHUB_ENV
+            echo "OPENAI_SCENE_MODEL=gpt-4o-mini" >> $GITHUB_ENV
+            echo "SLOP_NUM_IMAGES=6" >> $GITHUB_ENV
+            echo "SLOP_FPS=12" >> $GITHUB_ENV
+            echo "SLOP_RESOLUTION_WIDTH=360" >> $GITHUB_ENV
+            echo "SLOP_RESOLUTION_HEIGHT=640" >> $GITHUB_ENV
+          fi
 
       - name: Install dependencies
         run: uv sync --python 3.11 --frozen

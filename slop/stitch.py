@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Dict, Any
 import subprocess
 import tempfile
 
@@ -14,6 +14,55 @@ def _ffprobe_bin() -> str:
     return "ffprobe"
 
 
+def _compute_durations_from_alignment(
+    alignment: Optional[Dict[str, Any]],
+    num_images: int,
+    audio_duration_fallback: float,
+) -> List[float]:
+    """Compute per-image durations using alignment if available; otherwise even split.
+
+    Alignment schema may vary. We accept a generic structure with optional word or sentence timestamps.
+    If alignment lacks enough info, fall back to even split.
+    """
+    if not alignment:
+        return [max(0.1, audio_duration_fallback / max(1, num_images))] * max(1, num_images)
+    # Try to parse segments of form [{start, end, text}]
+    segments = None
+    for key in ("segments", "words", "sentences"):
+        value = alignment.get(key)
+        if isinstance(value, list) and value:
+            segments = value
+            break
+    if not segments:
+        return [max(0.1, audio_duration_fallback / max(1, num_images))] * max(1, num_images)
+    # Map segments into contiguous buckets of num_images
+    try:
+        starts: List[float] = []
+        ends: List[float] = []
+        for seg in segments:
+            start = float(seg.get("start", 0.0))
+            end = float(seg.get("end", start))
+            starts.append(start)
+            ends.append(end)
+        total_dur = max(audio_duration_fallback, max(ends) if ends else 0.0)
+        # Split timeline into num_images bins and compute durations per bin
+        bin_edges = [i * (total_dur / max(1, num_images)) for i in range(max(1, num_images) + 1)]
+        durations: List[float] = []
+        for i in range(max(1, num_images)):
+            bin_start = bin_edges[i]
+            bin_end = bin_edges[i + 1]
+            # Sum portion of segments overlapping this bin
+            acc = 0.0
+            for s, e in zip(starts, ends):
+                overlap = max(0.0, min(bin_end, e) - max(bin_start, s))
+                acc += overlap
+            # Ensure minimum sensible duration
+            durations.append(max(0.1, acc if acc > 0 else (total_dur / max(1, num_images))))
+        return durations
+    except Exception:
+        return [max(0.1, audio_duration_fallback / max(1, num_images))] * max(1, num_images)
+
+
 def stitch_video(
     image_paths: List[Path],
     audio_path: Path,
@@ -21,6 +70,8 @@ def stitch_video(
     width: int,
     height: int,
     fps: int,
+    *,
+    alignment: Optional[Dict[str, Any]] = None,
 ):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg = _ffmpeg_bin()
@@ -43,15 +94,18 @@ def stitch_video(
         audio_duration = float((result.stdout or "").strip())
     except Exception:
         audio_duration = 120.0
-    duration_per_image = max(0.1, audio_duration / total_images)
+
+    # Compute per-image durations (either alignment-driven or even-split)
+    durations = _compute_durations_from_alignment(alignment, total_images, audio_duration)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         list_path = Path(tmpdir) / "images.txt"
         with open(list_path, "w", encoding="utf-8") as f:
-            for img in image_paths:
+            for img, dur in zip(image_paths, durations):
                 abs_img = Path(img).resolve()
                 f.write(f"file {abs_img}\n")
-                f.write(f"duration {duration_per_image}\n")
+                f.write(f"duration {dur}\n")
+            # Repeat last frame without duration to flush concat demuxer timing
             abs_last = Path(image_paths[-1]).resolve()
             f.write(f"file {abs_last}\n")
 
