@@ -14,7 +14,7 @@ Environment
 - `OPENAI_API_KEY` for LLM image prompts and scripts
 - `ELEVENLABS_API_KEY` for TTS
 - Optional overrides (production defaults preserved):
-  - `SLOP_MODE` = `production` | `test`
+  - `SLOP_MODE` = `production` | `test` (in test we set `OPENAI_IMAGE_QUALITY=low` for `gpt-image-1` to reduce cost)
   - `OPENAI_CHAT_MODEL`, `OPENAI_SCENE_MODEL`
   - `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_SIZE`, `OPENAI_IMAGE_QUALITY`
   - `ELEVENLABS_TTS_MODEL`, `ELEVENLABS_TTS_FORMAT`

@@ -100,8 +100,8 @@ def apply_env_overrides(config: AppConfig) -> AppConfig:
     if config.environment_mode == "test":
         # In tests, only reduce image generation cost by lowering quality.
         # Keep all other settings identical to production unless explicitly overridden by env.
-        # OpenAI images API: quality can be "high" or "standard" (standard is cheaper).
-        config.image_quality = os.getenv("OPENAI_IMAGE_QUALITY", "standard")
+        # For gpt-image-1, use the cheapest quality tier: "low".
+        config.image_quality = os.getenv("OPENAI_IMAGE_QUALITY", "low")
 
     return config
 

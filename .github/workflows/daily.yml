@@ -51,7 +51,7 @@ jobs:
       - name: Lower image quality in test mode (cheapest change)
         run: |
           if [ "${{ github.event.inputs.mode }}" = "test" ]; then
-            echo "OPENAI_IMAGE_QUALITY=standard" >> $GITHUB_ENV
+            echo "OPENAI_IMAGE_QUALITY=low" >> $GITHUB_ENV
           fi
 
       - name: Install dependencies
