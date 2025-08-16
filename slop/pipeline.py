@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 import os
+import json
 
 from .config import AppConfig, apply_env_overrides
 from .topics import generate_topic
@@ -47,6 +48,17 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         num_scenes=num_scenes,
         model=config.chat_model,
     )
+
+    # Write scenes to JSON for manual verification and print to stdout
+    try:
+        scenario_dict = {"scenes": [s.model_dump() for s in scenes]}
+        scenes_json_path = work_dir / "scenes.json"
+        with open(scenes_json_path, "w", encoding="utf-8") as f:
+            json.dump(scenario_dict, f, ensure_ascii=False, indent=2)
+        print(f"[scenes] wrote {scenes_json_path}")
+        print(json.dumps(scenario_dict, ensure_ascii=False, indent=2))
+    except Exception:
+        pass
 
     # 3) Prepare image prompts and narration script
     image_prompts = [s.image_description for s in scenes]
