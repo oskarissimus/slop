@@ -98,24 +98,10 @@ def apply_env_overrides(config: AppConfig) -> AppConfig:
     config.tts_output_format = os.getenv("ELEVENLABS_TTS_FORMAT", config.tts_output_format)
 
     if config.environment_mode == "test":
-        # Cheap, fast settings for CI/manual tests.
-        # Keep production-like behavior unless overridden, but reduce costs.
-        config.fps = int(os.getenv("SLOP_FPS", 12))
-        config.resolution_width = int(os.getenv("SLOP_RESOLUTION_WIDTH", 360))
-        config.resolution_height = int(os.getenv("SLOP_RESOLUTION_HEIGHT", 640))
-        config.num_images = int(os.getenv("SLOP_NUM_IMAGES", 6))
-        # Use placeholder images by default to avoid spend; allow override to 'openai'
-        config.image_provider = os.getenv("SLOP_IMAGE_PROVIDER", "placeholder")
-        # Prefer cheaper image model/size if images are enabled
-        config.image_model = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
-        config.image_size = os.getenv("OPENAI_IMAGE_SIZE", "512x512")
+        # In tests, only reduce image generation cost by lowering quality.
+        # Keep all other settings identical to production unless explicitly overridden by env.
+        # OpenAI images API: quality can be "high" or "standard" (standard is cheaper).
         config.image_quality = os.getenv("OPENAI_IMAGE_QUALITY", "standard")
-        # LLM tiny/cheap models
-        config.chat_model = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
-        config.scene_llm_model = os.getenv("OPENAI_SCENE_MODEL", "gpt-4o-mini")
-        # Keep TTS defaults; bitrate has minimal cost impact vs chars
-        config.tts_model_id = os.getenv("ELEVENLABS_TTS_MODEL", "eleven_multilingual_v2")
-        config.tts_output_format = os.getenv("ELEVENLABS_TTS_FORMAT", "mp3_44100_128")
 
     return config
 
