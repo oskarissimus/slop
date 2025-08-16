@@ -54,11 +54,11 @@ jobs:
             echo "OPENAI_IMAGE_QUALITY=low" >> $GITHUB_ENV
           fi
 
-      - name: Install dependencies
-        run: uv sync --python 3.11 --frozen
-
-      - name: Generate and upload
-        run: uv run --python 3.11 slop run-once --upload --credentials-dir ./.youtube --output-dir outputs
+      - name: Generate (upload only in production)
+        run: |
+          UPLOAD_FLAG=""
+          if [ "${{ github.event.inputs.mode }}" != "test" ]; then UPLOAD_FLAG="--upload"; fi
+          uv run --python 3.11 slop run-once $UPLOAD_FLAG --credentials-dir ./.youtube --output-dir outputs
 
       - name: Upload artifact (latest video)
         uses: actions/upload-artifact@v4
