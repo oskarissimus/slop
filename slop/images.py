@@ -98,8 +98,8 @@ async def _describe_scenes_with_llm_async(script_chunks: List[str], *, model: st
     system_msg = (
         "Jesteś asystentem, który tworzy szczegółowe opisy kadrów do generowania hiperrealistycznych obrazów. "
         "Nie dodawaj żadnego tekstu na obrazie. Zadbaj o fotorealizm, sugestywne, filmowe światło, ostre detale, "
-        "charaktery i rekwizyty zgodne z kontekstem. Uwzględnij realia dawnej Rzeczypospolitej, stroje, uzbrojenie, "
-        "arkady, dwory szlacheckie czy gościńce — tylko jeśli wynika to z fragmentu."
+        "charaktery i rekwizyty zgodne z kontekstem. Jeśli wynika to z fragmentu, uwzględnij realia dawnej Rzeczypospolitej: kontusze, husarskie uzbrojenie, "
+        "mapy, kartusze z datami (bez tekstu na obrazie), sylwetki okrętów Armady, sejmikowe wnętrza, porty Bałtyku."
     )
 
     semaphore = asyncio.Semaphore(min(8, max(1, len(script_chunks))))

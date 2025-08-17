@@ -33,16 +33,18 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
     work_dir.mkdir(parents=True, exist_ok=True)
 
     # 1) Determine prompt/topic. If PROMPT provided via env/workflow, use it; else auto-generate.
-    prompt_detail = os.getenv("PROMPT")
-    if prompt_detail:
-        topic = prompt_detail.strip()[:120]
+    prompt_raw = os.getenv("PROMPT")
+    if prompt_raw:
+        prompt_detail = prompt_raw.strip()
+        topic = prompt_detail[:120]
     else:
+        prompt_detail = None
         topic = generate_topic(config.personality)
 
     # 2) Generate structured scenes
     num_scenes = max(1, config.num_images)
     scenes: List[Scene] = generate_scenes(
-        prompt_detail=topic,
+        prompt_detail=prompt_detail or topic,
         personality=config.personality,
         target_duration_seconds=config.duration_seconds,
         num_scenes=num_scenes,

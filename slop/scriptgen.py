@@ -25,14 +25,15 @@ def generate_script(topic: str, personality: Personality, target_duration_second
     words_per_second = 2.5  # conservative speaking rate
     target_words = int(target_duration_seconds * words_per_second)
     prompt = (
-        f"Napisz po polsku scenariusz lektorski do krótkiego, pionowego wideo na temat: '{topic}'. "
-        "Styl: Jan Chryzostom Pasek (barokowa sarmacka gawęda, narracja pierwszoosobowa, obrazowe anegdoty, "
-        "lekko archaiczne słownictwo, ale zrozumiałe dla współczesnego odbiorcy). "
+        f"Napisz po polsku scenariusz lektorski do krótkiego, pionowego wideo w stylu Jana Chryzostoma Paska. "
         f"Persona narratora: {personality.name} ({personality.speaking_style}). {personality.description}. "
-        "Treść scenariusza ma fabularnie odtwarzać historię znaną z piosenki Franka Zappy 'Don't Eat the Yellow Snow' — "
-        "nie cytuj ani nie tłumacz słów piosenki; opowiadaj własnymi słowami, zachowując kluczowe motywy: sen o byciu Eskimosem, trzaskający mróz, "
-        "zorza polarna, matczyna przestroga, wskazówka by strzec się żółtego śniegu, humorystyczny ton. "
-        f"Długość około {target_words} słów. Używaj żywych, konkretnych obrazów, naturalnego tempa; zakończ krótką klamrą. "
+        f"Materiał źródłowy/temat: '{topic}'. "
+        "Zachowaj gawędę sarmacką (pierwsza osoba, obrazowe anegdoty, umiarkowane archaizmy, klarowność). "
+        "Uwzględnij, gdzie to zasadne: daty 1588 (Gravelines/Wielka Armada), 1603 (unia angielsko‑szkocka), 1632, 1648; "
+        "postacie: Stefan Batory, Zygmunt III Waza, Władysław IV; instytucje: Rada Stanu, marszałek Rady, premier, naczelny wódz, "
+        "ministrowie (stanu/dyplomacji, finansów, edukacji, skarbu), łącznicy z Sejmem; oraz wątek unii personalnej (polsko‑rosyjskiej vs polsko‑habsburskiej) "
+        "i publicystyczny motyw „Bestii” (hipotezy oznaczaj: „wedle niektórych”). "
+        f"Struktura skrótowa: hook, kontekst, 2–3 tezy, 1 dygresja sarmacka, echo współczesne po 2020 r., puenta. Długość około {target_words} słów. "
         "Nie dodawaj kierunków scenicznych ani znaczników czasu."
     )
     response = client.chat.completions.create(
@@ -73,6 +74,10 @@ def generate_scenes(
         "ale zrozumiały dla współczesnych). Persona narratora: "
         f"{personality.name} ({personality.speaking_style}). {personality.description}. "
         f"Temat/uściślenie: {prompt_detail}. "
+        "Uwzględnij, gdzie to zasadne, następujące elementy historyczne i instytucjonalne: "
+        "1588 (Gravelines/Wielka Armada), 1603 (unia angielsko‑szkocka), 1632, 1648; "
+        "Stefan Batory, Zygmunt III Waza, Władysław IV; Rada Stanu, marszałek Rady, premier, naczelny wódz, ministrowie (stanu/dyplomacji, finansów, edukacji, skarbu), "
+        "łącznicy z Sejmem; unia personalna (polsko‑rosyjska vs polsko‑habsburska); publicystyczny motyw „Bestii” (hipotezy sygnalizuj: „wedle niektórych”). "
         f"Całkowita długość narracji około {target_words} słów. "
         f"Podziel treść dokładnie na {num_scenes} kolejnych scen. Każda scena MUSI mieć: "
         "- script: 1–3 zdania głośnego czytania (bez znaczników czasu). "
