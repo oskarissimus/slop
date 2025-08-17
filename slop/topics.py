@@ -14,19 +14,19 @@ def generate_topic(personality: Personality) -> str:
     client = OpenAI()
     prompt = (
         "Jesteś asystentem tworzącym tematy krótkich pionowych wideo. "
-        "Zaproponuj jeden, chwytliwy i konkretny tytuł po polsku, odpowiedni dla ~2-minutowego materiału. "
+        "Zaproponuj jeden, chwytliwy i konkretny tytuł po polsku, odpowiedni dla ~2‑minutowego materiału. "
         f"Persona: {personality.name}. Opis: {personality.description}. "
-        "Motyw przewodni: śniłem, że jestem Eskimosem. "
-        "Treść: ta sama oś fabularna co w piosence Franka Zappy 'Don't Eat the Yellow Snow' — nie cytuj tekstu piosenki, nawiązuj jedynie do zdarzeń. "
+        "Tematyka: Rzeczpospolita vs „Bestia”, alternatywny „Wiek I” dla państwa; okna szans: 1588, 1603, 1632, 1648; "
+        "postacie: Stefan Batory, Zygmunt III Waza, Władysław IV; narzędzia: Rada Stanu, premier, naczelny wódz, ministrowie; unia personalna. "
         "Styl/nastrój tytułu: gawęda sarmacka Jana Chryzostoma Paska (pierwsza osoba, obrazowe anegdoty, "
         "lekko archaiczne słownictwo, ale zrozumiałe dla współczesnego odbiorcy). "
-        "Akcentuj: mroźną aurę, zorze polarne, przestrogę przed żółtym śniegiem, humor gawędziarski, element snu. "
+        "Akcentuj: „Czy mogliśmy powstrzymać Bestię?”, „Unia personalna?”, „Rada Stanu”. "
         "Zwróć tylko tytuł, bez cudzysłowów."
     )
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "Tworzysz zwięzłe, angażujące polskie tytuły do krótkich wideo o motywie snu, że narrator jest Eskimosem, z fabułą inspirowaną piosenką Franka Zappy 'Don't Eat the Yellow Snow' (bez cytowania), stylizowane na gawędy Jana Chryzostoma Paska."},
+            {"role": "system", "content": "Tworzysz zwięzłe, angażujące polskie tytuły do krótkich wideo historyczno‑publicystycznych o Rzeczypospolitej i motywie „Bestii”, stylizowane na gawędy Jana Chryzostoma Paska (bez dosłownych cytatów)."},
             {"role": "user", "content": prompt},
         ],
         temperature=0.9,
