@@ -18,8 +18,12 @@ def main():
 	os.environ.setdefault("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
 	out_dir = Path("/workspace/outputs/app_check")
 	out_dir.mkdir(parents=True, exist_ok=True)
-	script = "Krótki test generacji obrazów do wideo pionowego."
-	paths = generate_images(script_text=script, num_images=2, output_dir=out_dir, provider="openai")
+	# Provide explicit image prompts; automatic scene description is removed.
+	image_prompts = [
+		"Fotorealistyczna zimowa tundra o zmierzchu, śnieżna zamieć, husky w zaprzęgu, miękkie filmowe światło, pionowy kadr 9:16, brak tekstu.",
+		"Wnętrze drewnianej chaty oświetlonej ogniem, stół z mapą i kompasem, detal dłoni przesuwającej figurę, głębia ostrości, brak tekstu.",
+	]
+	paths = generate_images(image_prompts=image_prompts, num_images=2, output_dir=out_dir, provider="openai")
 	for p in paths:
 		size = parse_png_size(Path(p))
 		if size:

@@ -86,55 +86,7 @@ async def _generate_single_image_openai_async(
     return out_path
 
 
-async def _describe_scenes_with_llm_async(script_chunks: List[str], *, model: str) -> List[str]:
-    """Turn each script chunk into a detailed, hyperrealistic, text-free image prompt in Polish.
-
-    The guidance emphasizes: no on-frame text, cinematic lighting, realistic people and environments,
-    period-appropriate details if historical, and faithful illustration of the chunk.
-    Style note: imagery that supports a Jan Chryzostom Pasek-style narration (barokowa, sarmacka aura),
-    but we avoid stylizing as a painting; target photorealism.
-    """
-    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    system_msg = (
-        "Jesteś asystentem, który tworzy szczegółowe opisy kadrów do generowania hiperrealistycznych obrazów. "
-        "Nie dodawaj żadnego tekstu na obrazie. Zadbaj o fotorealizm, sugestywne, filmowe światło, ostre detale, "
-        "charaktery i rekwizyty zgodne z kontekstem. Jeśli wynika to z fragmentu, uwzględnij realia dawnej Rzeczypospolitej: kontusze, husarskie uzbrojenie, "
-        "mapy, kartusze z datami (bez tekstu na obrazie), sylwetki okrętów Armady, sejmikowe wnętrza, porty Bałtyku."
-    )
-
-    semaphore = asyncio.Semaphore(min(8, max(1, len(script_chunks))))
-
-    async def _one(i: int, chunk: str) -> Tuple[int, str]:
-        async with semaphore:
-            user_msg = (
-                "Na podstawie poniższego fragmentu skryptu napisz zwięzły opis fotorealistycznej sceny (1–3 zdania), "
-                "który posłuży do generacji obrazu. Nie używaj dosłownych cytatów ani żadnego tekstu. "
-                "Uwzględnij konkret: miejsce, porę dnia, rekwizyty, ujęcie i kompozycję, klimat, emocje.\n\n"
-                f"Fragment: {chunk}"
-            )
-            resp = await client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": user_msg},
-                ],
-                temperature=0.6,
-                max_tokens=220,
-            )
-            core = (resp.choices[0].message.content or "").strip()
-            final_prompt = (
-                "Fotorealistyczna fotografia, brak tekstu, brak napisów, brak znaków wodnych. "
-                "Bardzo szczegółowe, naturalne światło filmowe, wysoki realizm skóry i materiałów, głębia ostrości. "
-                "Kompozycja pionowa 9:16, pełny kadr (full-bleed), bez ramek i bez czarnych pasów (bez letterboxingu). "
-                f"Scena: {core}"
-            )
-            return i, final_prompt
-
-    tasks = [_one(i, chunk) for i, chunk in enumerate(script_chunks)]
-    results = await asyncio.gather(*tasks)
-    results_sorted = sorted(results, key=lambda t: t[0])
-    prompts = [p for _, p in results_sorted]
-    return prompts
+## Removed: _describe_scenes_with_llm_async — the main flow now always supplies image prompts from structured scenes.
 
 
 def split_script_into_prompts(script_text: str, num_images: int) -> List[str]:
@@ -164,19 +116,13 @@ def generate_images(
 ) -> List[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     if image_prompts is None:
-        if script_text is None:
-            raise ValueError("Either image_prompts or script_text must be provided")
-        script_chunks = split_script_into_prompts(script_text, num_images)
-        # First stage: get LLM scene descriptions for each chunk
-        try:
-            scene_prompts = asyncio.run(_describe_scenes_with_llm_async(script_chunks, model=scene_llm_model))
-        except Exception:
-            # Fallback: use raw chunks as scene prompts if LLM unavail
-            scene_prompts = script_chunks
-    else:
-        scene_prompts = image_prompts[:num_images]
-        while len(scene_prompts) < num_images:
-            scene_prompts.append(scene_prompts[-1])
+        raise ValueError(
+            "image_prompts must be provided; automatic scene description generation was removed. "
+            "Use scriptgen.generate_scenes to obtain prompts."
+        )
+    scene_prompts = image_prompts[:num_images]
+    while len(scene_prompts) < num_images:
+        scene_prompts.append(scene_prompts[-1])
 
     # Save prompts for debugging
     try:
