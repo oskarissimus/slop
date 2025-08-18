@@ -7,7 +7,7 @@ from pydantic import BaseModel, ValidationError
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from .config import Personality
+from .config import AppConfig
 
 
 class Scene(BaseModel):
@@ -20,13 +20,12 @@ class Scenario(BaseModel):
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3))
-def generate_script(topic: str, personality: Personality, target_duration_seconds: int) -> str:
+def generate_script(topic: str, target_duration_seconds: int) -> str:
     client = OpenAI()  # picks up OPENAI_API_KEY from env
     words_per_second = 2.5  # conservative speaking rate
     target_words = int(target_duration_seconds * words_per_second)
     prompt = (
         f"Napisz po polsku scenariusz lektorski do krótkiego, pionowego wideo w stylu Jana Chryzostoma Paska. "
-        f"Persona narratora: {personality.name} ({personality.speaking_style}). {personality.description}. "
         f"Materiał źródłowy/temat: '{topic}'. "
         f" Długość około {target_words} słów. "
         "Nie dodawaj kierunków scenicznych ani znaczników czasu."
@@ -47,7 +46,6 @@ def generate_script(topic: str, personality: Personality, target_duration_second
 def generate_scenes(
     *,
     prompt_detail: str,
-    personality: Personality,
     target_duration_seconds: int,
     num_scenes: int,
     model: str = "gpt-4o-mini",
@@ -158,7 +156,7 @@ def generate_scenes(
         return scenes
     except (json.JSONDecodeError, ValidationError):
         # Fallback: produce a single-scene script, then replicate/pad
-        fallback_script = generate_script(topic=prompt_detail, personality=personality, target_duration_seconds=target_duration_seconds)
+        fallback_script = generate_script(topic=prompt_detail, target_duration_seconds=target_duration_seconds)
         split = [s.strip() for s in fallback_script.split(".") if s.strip()]
         if not split:
             split = [fallback_script]

@@ -7,19 +7,6 @@ import os
 from pydantic import BaseModel, Field
 
 
-class Personality(BaseModel):
-    name: str = "Curious Explorer"
-    description: str = (
-        "An upbeat, inquisitive narrator who explains concepts simply and vividly,"
-        " with curiosity, positivity, and gentle humor."
-    )
-    speaking_style: str = "warm, lively, friendly"
-    voice_id: str = Field(
-        default="21m00Tcm4TlvDq8ikWAM",  # ElevenLabs 'Rachel' as a common default
-        description="Default ElevenLabs voice id",
-    )
-
-
 class AppConfig(BaseModel):
     duration_seconds: int = 120
     fps: int = 24
@@ -27,7 +14,7 @@ class AppConfig(BaseModel):
     resolution_height: int = 1920
     num_images: int = 12
     image_provider: str = "placeholder"  # placeholder | openai
-    personality: Personality = Personality()
+    voice_id: str = "olRVHO9SSe7gI7wwlL9o"
 
     # Runtime/model knobs (production defaults mirror current behavior)
     environment_mode: str = Field(default_factory=lambda: os.getenv("SLOP_MODE", "production"))  # production | test
@@ -62,12 +49,7 @@ def write_default_config(target_path: Path) -> None:
         "resolution_height": 1920,
         "num_images": 12,
         "image_provider": "placeholder",
-        "personality": {
-            "name": "Curious Explorer",
-            "description": "An upbeat, inquisitive narrator who explains concepts simply and vividly, with curiosity, positivity, and gentle humor.",
-            "speaking_style": "warm, lively, friendly",
-            "voice_id": "21m00Tcm4TlvDq8ikWAM"
-        },
+        "voice_id": "olRVHO9SSe7gI7wwlL9o",
         # Scheduling removed; generate manually via CLI
     }
     """.strip()

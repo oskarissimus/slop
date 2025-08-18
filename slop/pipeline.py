@@ -39,13 +39,12 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         topic = prompt_detail[:120]
     else:
         prompt_detail = None
-        topic = generate_topic(config.personality)
+        topic = generate_topic()
 
     # 2) Generate structured scenes
     num_scenes = max(1, config.num_images)
     scenes: List[Scene] = generate_scenes(
         prompt_detail=prompt_detail or topic,
-        personality=config.personality,
         target_duration_seconds=config.duration_seconds,
         num_scenes=num_scenes,
         model=config.chat_model,
@@ -82,7 +81,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
     # 5) Synthesize audio with alignment information
     audio_path, alignment = synthesize_voice_with_alignment(
         text=script_text,
-        voice_id=config.personality.voice_id,
+        voice_id=config.voice_id,
         output_dir=work_dir,
         model_id=config.tts_model_id,
         output_format=config.tts_output_format,
