@@ -7,24 +7,17 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .config import AppConfig
 from .utils import sanitize_title
+from .prompts import TOPIC_GENERATION_SYSTEM_MESSAGE, TOPIC_GENERATION_USER_PROMPT
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3))
 def generate_topic() -> str:
     client = OpenAI()
-    prompt = (
-        "Jesteś asystentem tworzącym tematy krótkich pionowych wideo. "
-        "Zaproponuj jeden, chwytliwy i konkretny tytuł po polsku, odpowiedni dla ~2‑minutowego materiału. "
-        "Styl: gawęda sarmacka Jana Chryzostoma Paska. "
-        "Styl/nastrój tytułu: gawęda sarmacka Jana Chryzostoma Paska (pierwsza osoba, obrazowe anegdoty, "
-        "lekko archaiczne słownictwo, ale zrozumiałe dla współczesnego odbiorcy). "
-        "Nie odwołuj się do stałych list dat, postaci czy instytucji; trzymaj się bieżącego tematu i persony. "
-        "Zwróć tylko tytuł, bez cudzysłowów."
-    )
+    prompt = TOPIC_GENERATION_USER_PROMPT
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "Tworzysz zwięzłe, angażujące polskie tytuły do krótkich pionowych wideo w stylistyce gawędy Jana Chryzostoma Paska (bez dosłownych cytatów)."},
+            {"role": "system", "content": TOPIC_GENERATION_SYSTEM_MESSAGE},
             {"role": "user", "content": prompt},
         ],
         temperature=0.9,

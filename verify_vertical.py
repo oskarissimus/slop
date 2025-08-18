@@ -6,6 +6,10 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
+# Import prompts from the slop module
+sys.path.insert(0, str(Path(__file__).parent))
+from slop.prompts import VERTICAL_IMAGE_TEST_PROMPTS
+
 
 API_URL = "https://api.openai.com/v1/images/generations"
 OUTPUT_DIR = Path("/workspace/outputs/verify_vertical")
@@ -100,10 +104,7 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    prompts = [
-        "Test vertical image, photorealistic portrait orientation, full-bleed, no borders",
-        "Test vertical image 2, photorealistic portrait orientation, full-bleed, no borders",
-    ]
+    prompts = VERTICAL_IMAGE_TEST_PROMPTS
 
     results = []
     for idx, p in enumerate(prompts):

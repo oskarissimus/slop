@@ -9,7 +9,7 @@ import json
 
 from .config import AppConfig, apply_env_overrides
 from .topics import generate_topic
-from .scriptgen import generate_script, generate_scenes, Scene
+from .scriptgen import generate_scenes, Scene
 from .images import generate_images
 from .voice import synthesize_voice_with_alignment
 from .stitch import stitch_video
