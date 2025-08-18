@@ -30,7 +30,6 @@ def _validate_required_env() -> None:
 
 
 def generate_and_upload(
-    config_path: Path | str = "slop_app_config.py",
     output_dir: Path | str = "outputs",
     credentials_dir: Path | str = Path.cwd(),
     privacy_status: str = "private",
@@ -43,13 +42,12 @@ def generate_and_upload(
     load_dotenv()
     _validate_required_env()
 
-    config_path = Path(config_path)
     output_dir = Path(output_dir)
     credentials_dir = Path(credentials_dir)
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    config = AppConfig.load(config_path)
+    config = AppConfig()
     result = generate_video_pipeline(config=config, output_dir=output_dir)
     console.print(f"[green]Generated video: {result.video_path}")
 

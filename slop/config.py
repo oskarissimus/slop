@@ -26,34 +26,7 @@ class AppConfig(BaseModel):
     tts_model_id: str = Field(default_factory=lambda: os.getenv("ELEVENLABS_TTS_MODEL", "eleven_multilingual_v2"))
     tts_output_format: str = Field(default_factory=lambda: os.getenv("ELEVENLABS_TTS_FORMAT", "mp3_44100_128"))
 
-    @staticmethod
-    def load(path: Path) -> "AppConfig":
-        namespace: dict = {}
-        with open(path, "r", encoding="utf-8") as f:
-            code = f.read()
-        exec(compile(code, str(path), "exec"), namespace)
-        if "CONFIG" not in namespace:
-            raise ValueError("Config file must define CONFIG = {...}")
-        return AppConfig.model_validate(namespace["CONFIG"])  # type: ignore[arg-type]
-
-
-def write_default_config(target_path: Path) -> None:
-    target_path.write_text(
-        """
-    # slop config
-    # Define CONFIG as a dict matching AppConfig in `slop/config.py`
-    CONFIG = {
-        "duration_seconds": 120,
-        "fps": 24,
-        "resolution_width": 1080,
-        "resolution_height": 1920,
-        "num_images": 12,
-        "image_provider": "placeholder",
-        "voice_id": "olRVHO9SSe7gI7wwlL9o",
-        # Scheduling removed; generate manually via CLI
-    }
-    """.strip()
-    )
+# Note: file-based config loading has been removed intentionally.
 
 
 def apply_env_overrides(config: AppConfig) -> AppConfig:

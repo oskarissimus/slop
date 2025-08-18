@@ -6,7 +6,6 @@ Setup
 - Install with uv: `uv sync`
 
 CLI
-- `slop init` creates a default config at `slop_app_config.py`
 - `slop run-once` generates a single 2-min video now
 - Options: `--mode production|test` to switch cost/quality, `--prompt "opis tematu"` to pass manual topic
 

@@ -8,7 +8,7 @@ import typer
 from rich.console import Console
 from dotenv import load_dotenv
 
-from .config import AppConfig, write_default_config
+from .config import AppConfig
 from .pipeline import generate_video_pipeline
 from .youtube_uploader import YouTubeUploader, UploadMetadata
 from .utils import sanitize_title
@@ -39,7 +39,6 @@ def validate_required_env() -> None:
 @app.callback(invoke_without_command=True)
 def _default(
     ctx: typer.Context,
-    config_path: str = typer.Option("slop_app_config.py", help="Path to config"),
     output_dir: str = typer.Option("outputs", help="Directory for outputs"),
     upload: bool = typer.Option(False, help="Upload the generated video to YouTube"),
     title: Optional[str] = typer.Option(None, help="YouTube title (defaults to generated topic)"),
@@ -61,12 +60,8 @@ def _default(
         os.environ["SLOP_MODE"] = mode
     if prompt:
         os.environ["PROMPT"] = prompt
-    target = Path(config_path)
-    if not target.exists():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        write_default_config(target)
-        console.print(f"[yellow]No config found. Wrote default to {target}")
-    config = AppConfig.load(target)
+    # Always use in-memory defaults; no file-based config
+    config = AppConfig()
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     result = generate_video_pipeline(config=config, output_dir=Path(output_dir))
     console.print(f"[green]Generated video: {result.video_path}")
@@ -91,22 +86,11 @@ def _default(
             console.print(f"[red]YouTube upload failed: {e}")
 
 
-@app.command()
-def init(config_path: str = typer.Option("slop_app_config.py", help="Where to write default config")) -> None:
-    """Create a default config file."""
-    ensure_env_loaded()
-    target = Path(config_path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists():
-        console.print(f"[yellow]Config already exists at {target}")
-        return
-    write_default_config(target)
-    console.print(f"[green]Wrote default config to {target}")
+# Removed `init` command as we no longer write a default config file
 
 
 @app.command()
 def run_once(
-    config_path: str = typer.Option("slop_app_config.py", help="Path to config"),
     output_dir: str = typer.Option("outputs", help="Directory for outputs"),
     upload: bool = typer.Option(False, help="Upload the generated video to YouTube"),
     title: Optional[str] = typer.Option(None, help="YouTube title (defaults to generated topic)"),
@@ -126,7 +110,7 @@ def run_once(
         os.environ["SLOP_MODE"] = mode
     if prompt:
         os.environ["PROMPT"] = prompt
-    config = AppConfig.load(Path(config_path))
+    config = AppConfig()
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     result = generate_video_pipeline(config=config, output_dir=Path(output_dir))
     console.print(f"[green]Generated video: {result.video_path}")
