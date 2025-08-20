@@ -8,8 +8,8 @@ import os
 import json
 
 from .config import AppConfig, apply_env_overrides
-from .topics import generate_topic
-from .scriptgen import generate_scenes, Scene
+from .utils import sanitize_title
+from .scriptgen import generate_topic_and_scenes, Scene
 from .images import generate_images
 from .voice import synthesize_voice_with_alignment
 from .stitch import stitch_video
@@ -32,23 +32,17 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
     work_dir = output_dir / basename
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) Determine prompt/topic. If PROMPT provided via env/workflow, use it; else auto-generate.
+    # 1) Always use combined generator (no fallback).
     prompt_raw = os.getenv("PROMPT")
-    if prompt_raw:
-        prompt_detail = prompt_raw.strip()
-        topic = prompt_detail[:120]
-    else:
-        prompt_detail = None
-        topic = generate_topic()
-
-    # 2) Generate structured scenes
     num_scenes = max(1, config.num_images)
-    scenes: List[Scene] = generate_scenes(
-        prompt_detail=prompt_detail or topic,
+    user_input = prompt_raw.strip() if prompt_raw else ""
+    topic, scenes = generate_topic_and_scenes(
+        input_text=user_input,
         target_duration_seconds=config.duration_seconds,
         num_scenes=num_scenes,
         model=config.chat_model,
     )
+    topic = sanitize_title(topic)
 
     # Write scenes to JSON for manual verification and print to stdout
     try:
@@ -68,14 +62,12 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
     # 4) Generate images asynchronously per scene (provider-configurable)
     image_paths = generate_images(
         image_prompts=image_prompts,
-        script_text=None,
         num_images=config.num_images,
         output_dir=work_dir,
         provider=config.image_provider,
         image_model=config.image_model,
         image_size=config.image_size,
         image_quality=config.image_quality,
-        scene_llm_model=config.scene_llm_model,
     )
 
     # 5) Synthesize audio with alignment information

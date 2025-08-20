@@ -13,7 +13,7 @@ class AppConfig(BaseModel):
     resolution_width: int = 1080
     resolution_height: int = 1920
     num_images: int = 12
-    image_provider: str = "placeholder"  # placeholder | openai
+    image_provider: str = "openai"  # placeholder | openai
     voice_id: str = "olRVHO9SSe7gI7wwlL9o"
 
     # Runtime/model knobs (production defaults mirror current behavior)

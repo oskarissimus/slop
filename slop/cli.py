@@ -49,7 +49,7 @@ def _default(
     thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to thumbnail image"),
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
     mode: Optional[str] = typer.Option(None, help="Override SLOP_MODE: production | test"),
-    prompt: Optional[str] = typer.Option(None, help="Override PROMPT for scenario generation"),
+    prompt: Optional[str] = typer.Option(None, help="Pojedynczy input: na jego podstawie w jednym zapytaniu powstaje topic i sceny"),
 ) -> None:
     """If no command is provided, run one-off generation with defaults."""
     ensure_env_loaded()
@@ -101,7 +101,7 @@ def run_once(
     thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to thumbnail image"),
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
     mode: Optional[str] = typer.Option(None, help="Override SLOP_MODE: production | test"),
-    prompt: Optional[str] = typer.Option(None, help="Override PROMPT for scenario generation"),
+    prompt: Optional[str] = typer.Option(None, help="Pojedynczy input: na jego podstawie w jednym zapytaniu powstaje topic i sceny"),
 ) -> None:
     """Generate a single two-minute video now."""
     ensure_env_loaded()
