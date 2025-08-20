@@ -50,6 +50,7 @@ def _default(
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
     mode: Optional[str] = typer.Option(None, help="Override SLOP_MODE: production | test"),
     prompt: Optional[str] = typer.Option(None, help="Pojedynczy input: na jego podstawie w jednym zapytaniu powstaje topic i sceny"),
+    prompt_file: Optional[str] = typer.Option(None, "--prompt-file", help="Ścieżka do pliku TXT zawierającego prompt (użyte, jeśli --prompt nie podano)"),
 ) -> None:
     """If no command is provided, run one-off generation with defaults."""
     ensure_env_loaded()
@@ -60,6 +61,18 @@ def _default(
         os.environ["SLOP_MODE"] = mode
     if prompt:
         os.environ["PROMPT"] = prompt
+    elif prompt_file:
+        p = Path(prompt_file)
+        if not p.exists() or not p.is_file():
+            typer.secho(f"Prompt file not found: {prompt_file}", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+        try:
+            content = p.read_text(encoding="utf-8").strip()
+        except Exception as e:
+            typer.secho(f"Failed to read prompt file: {e}", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+        if content:
+            os.environ["PROMPT"] = content
     # Always use in-memory defaults; no file-based config
     config = AppConfig()
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -102,6 +115,7 @@ def run_once(
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
     mode: Optional[str] = typer.Option(None, help="Override SLOP_MODE: production | test"),
     prompt: Optional[str] = typer.Option(None, help="Pojedynczy input: na jego podstawie w jednym zapytaniu powstaje topic i sceny"),
+    prompt_file: Optional[str] = typer.Option(None, "--prompt-file", help="Ścieżka do pliku TXT zawierającego prompt (użyte, jeśli --prompt nie podano)"),
 ) -> None:
     """Generate a single two-minute video now."""
     ensure_env_loaded()
@@ -110,6 +124,18 @@ def run_once(
         os.environ["SLOP_MODE"] = mode
     if prompt:
         os.environ["PROMPT"] = prompt
+    elif prompt_file:
+        p = Path(prompt_file)
+        if not p.exists() or not p.is_file():
+            typer.secho(f"Prompt file not found: {prompt_file}", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+        try:
+            content = p.read_text(encoding="utf-8").strip()
+        except Exception as e:
+            typer.secho(f"Failed to read prompt file: {e}", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+        if content:
+            os.environ["PROMPT"] = content
     config = AppConfig()
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     result = generate_video_pipeline(config=config, output_dir=Path(output_dir))

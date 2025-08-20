@@ -58,7 +58,13 @@ jobs:
         run: |
           UPLOAD_FLAG=""
           if [ "${{ github.event.inputs.mode }}" != "test" ]; then UPLOAD_FLAG="--upload"; fi
-          uv run --python 3.11 slop run-once $UPLOAD_FLAG --credentials-dir ./.youtube --output-dir outputs
+          PROMPT_ARGS=""
+          if [ -n "${{ github.event.inputs.prompt }}" ]; then
+            PROMPT_ARGS="--prompt \"${{ github.event.inputs.prompt }}\""
+          elif [ -f "prompt.txt" ]; then
+            PROMPT_ARGS="--prompt-file prompt.txt"
+          fi
+          uv run --python 3.11 slop run-once $UPLOAD_FLAG --credentials-dir ./.youtube --output-dir outputs $PROMPT_ARGS
 
       - name: Upload artifact (latest video)
         uses: actions/upload-artifact@v4
