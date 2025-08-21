@@ -14,7 +14,10 @@ class AppConfig(BaseModel):
     resolution_height: int = 1920
     num_images: int = 12
     image_provider: str = "openai"  # placeholder | openai
-    voice_id: str = "21m00Tcm4TlvDq8ikWAM"
+    voice_id: str = "pNInz6obpgDQGcFmaJgB"
+    #olRVHO9SSe7gI7wwlL9o - rachel
+    #21m00Tcm4TlvDq8ikWAM - poeta
+    #pNInz6obpgDQGcFmaJgB - sarmata
 
     # Runtime/model knobs (production defaults mirror current behavior)
     environment_mode: str = Field(default_factory=lambda: os.getenv("SLOP_MODE", "production"))  # production | test
