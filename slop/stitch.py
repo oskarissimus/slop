@@ -130,6 +130,29 @@ def stitch_video(
 
     with tempfile.TemporaryDirectory() as tmpdir:
         list_path = Path(tmpdir) / "images.txt"
+        # Create SRT subtitles aligned to per-scene durations
+        srt_path = Path(tmpdir) / "captions.srt"
+        def _fmt_srt_timestamp(ms: int) -> str:
+            hrs = ms // 3_600_000
+            rem = ms % 3_600_000
+            mins = rem // 60_000
+            rem = rem % 60_000
+            secs = rem // 1000
+            msec = rem % 1000
+            return f"{hrs:02d}:{mins:02d}:{secs:02d},{msec:03d}"
+        try:
+            acc_ms = 0
+            with open(srt_path, "w", encoding="utf-8") as sf:
+                for i, (scene, dur) in enumerate(zip(scenes, durations), start=1):
+                    start_ms = acc_ms
+                    end_ms = acc_ms + int(round(dur * 1000)) - 1
+                    acc_ms = end_ms + 1
+                    sf.write(f"{i}\n")
+                    sf.write(f"{_fmt_srt_timestamp(start_ms)} --> {_fmt_srt_timestamp(end_ms)}\n")
+                    sf.write(scene.script.strip() + "\n\n")
+            logger.info("[stitch] wrote subtitles | file=%s", str(srt_path))
+        except Exception as e:
+            logger.warning("[stitch] failed to write subtitles: %s", e)
         with open(list_path, "w", encoding="utf-8") as f:
             for img, dur in zip(image_paths, durations):
                 abs_img = Path(img).resolve()
@@ -141,6 +164,16 @@ def stitch_video(
 
         logger.info("[stitch] concatenating images into silent video | list=%s", str(list_path))
         interim_video = Path(tmpdir) / "video_silent.mp4"
+        # Build filter chain: scale/crop -> burn subtitles -> overlay clock -> format
+        # Use pts-based clock with hours:minutes:seconds.milliseconds for debugging
+        clock_text = r"%{pts\:hms}"
+        vf_chain = (
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},"
+            f"subtitles=filename={str(srt_path)}:charenc=UTF-8,"
+            f"drawtext=fontcolor=white:fontsize=24:box=1:boxcolor=black@0.4:boxborderw=8:x=10:y=10:text={clock_text},"
+            "format=yuv420p"
+        )
         cmd_video = [
             ffmpeg,
             "-y",
@@ -151,7 +184,7 @@ def stitch_video(
             "-i",
             str(list_path),
             "-vf",
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},format=yuv420p",
+            vf_chain,
             "-r",
             str(fps),
             "-pix_fmt",
