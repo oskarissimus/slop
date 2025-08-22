@@ -14,8 +14,9 @@ class AppConfig(BaseModel):
     resolution_height: int = 1920
     num_images: int = 12
     image_provider: str = "openai"  # placeholder | openai
-    voice_id: str = "pNInz6obpgDQGcFmaJgB"
+    voice_id: str = "d4Z5Fvjohw3zxGpV8XUV"
     style: float = 0.34
+    #d4Z5Fvjohw3zxGpV8XUV - Maria
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
     #pNInz6obpgDQGcFmaJgB - sarmata
