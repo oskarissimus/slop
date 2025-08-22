@@ -18,9 +18,13 @@ def _extract_audio_base64(response: Any) -> Optional[str]:
         return None
     # Mapping-like
     if isinstance(response, dict):
-        return response.get("audio_base64") or response.get("audio")
+        for k in ("audio_base64", "audio_base_64", "audio"):
+            v = response.get(k)
+            if isinstance(v, str) and v:
+                return v
+        return None
     # Object-like
-    for attr in ("audio_base64", "audio"):
+    for attr in ("audio_base64", "audio_base_64", "audio"):
         value = getattr(response, attr, None)
         if isinstance(value, str) and value:
             return value
@@ -60,6 +64,13 @@ def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, 
         model_id=model_id,
         output_format=output_format,
     )
+
+    # Debug: log which attributes exist on the response
+    try:
+        keys_or_attrs = list(response.keys()) if isinstance(response, dict) else dir(response)
+        logger.debug("[tts] response attrs: %s", keys_or_attrs)
+    except Exception:
+        pass
 
     audio_b64 = _extract_audio_base64(response)
     alignment: Optional[Dict[str, Any]] = _extract_alignment(response)
