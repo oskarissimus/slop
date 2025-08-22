@@ -28,23 +28,30 @@ def _compute_durations_from_alignment(
         return [max(0.1, audio_duration_fallback / max(1, num_images))] * max(1, num_images)
     # Try to parse segments of form [{start, end, text}]
     segments = None
-    for key in ("segments", "words", "sentences"):
-        value = alignment.get(key)
-        if isinstance(value, list) and value:
-            segments = value
-            break
+    # Prefer character-level if available
+    chars = alignment.get("characters") if isinstance(alignment, dict) else None
+    starts = alignment.get("character_start_times_seconds") if isinstance(alignment, dict) else None
+    ends = alignment.get("character_end_times_seconds") if isinstance(alignment, dict) else None
+    if isinstance(chars, list) and isinstance(starts, list) and isinstance(ends, list) and len(chars) == len(starts) == len(ends) and len(chars) > 0:
+        segments = [{"start": float(s), "end": float(e), "text": c} for c, s, e in zip(chars, starts, ends)]
+    else:
+        for key in ("segments", "words", "sentences"):
+            value = alignment.get(key) if isinstance(alignment, dict) else None
+            if isinstance(value, list) and value:
+                segments = value
+                break
     if not segments:
         return [max(0.1, audio_duration_fallback / max(1, num_images))] * max(1, num_images)
     # Map segments into contiguous buckets of num_images
     try:
-        starts: List[float] = []
-        ends: List[float] = []
+        starts_list: List[float] = []
+        ends_list: List[float] = []
         for seg in segments:
             start = float(seg.get("start", 0.0))
             end = float(seg.get("end", start))
-            starts.append(start)
-            ends.append(end)
-        total_dur = max(audio_duration_fallback, max(ends) if ends else 0.0)
+            starts_list.append(start)
+            ends_list.append(end)
+        total_dur = max(audio_duration_fallback, max(ends_list) if ends_list else 0.0)
         # Split timeline into num_images bins and compute durations per bin
         bin_edges = [i * (total_dur / max(1, num_images)) for i in range(max(1, num_images) + 1)]
         durations: List[float] = []
@@ -53,7 +60,7 @@ def _compute_durations_from_alignment(
             bin_end = bin_edges[i + 1]
             # Sum portion of segments overlapping this bin
             acc = 0.0
-            for s, e in zip(starts, ends):
+            for s, e in zip(starts_list, ends_list):
                 overlap = max(0.0, min(bin_end, e) - max(bin_start, s))
                 acc += overlap
             # Ensure minimum sensible duration
@@ -146,5 +153,3 @@ def stitch_video(
         subprocess.run(cmd_mux, check=True)
 
     return output_path
-
-
