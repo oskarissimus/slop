@@ -149,6 +149,8 @@ def stitch_video(
                     acc_ms = end_ms + 1
                     sf.write(f"{i}\n")
                     sf.write(f"{_fmt_srt_timestamp(start_ms)} --> {_fmt_srt_timestamp(end_ms)}\n")
+                    range_line = f"Start: {_fmt_srt_timestamp(start_ms)}  End: {_fmt_srt_timestamp(end_ms)}"
+                    sf.write(range_line + "\n")
                     sf.write(scene.script.strip() + "\n\n")
             logger.info("[stitch] wrote subtitles | file=%s", str(srt_path))
         except Exception as e:
