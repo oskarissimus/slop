@@ -27,14 +27,13 @@ def get_combined_generation_user_prompt(
 	"""Generate user prompt for combined topic + scenes generation with structured JSON output."""
 	base = (
 		"Na podstawie poniższego opisu stwórz: \n"
-		"1) zwięzły, chwytliwy polski tytuł (maks 120 znaków) w stylistyce gawędy Jana Chryzostoma Paska,\n"
+		"1) zwięzły, chwytliwy polski tytuł (maks 120 znaków)\n"
 		"2) scenariusz podzielony dokładnie na wskazaną liczbę scen.\n\n"
 		f"Wejście użytkownika: {input_text or '(brak – zaproponuj własny ciekawy temat)'}\n\n"
 		f"Całkowita długość narracji około {target_words} słów. "
 		f"Podziel treść dokładnie na {num_scenes} kolejnych scen. Każda scena MUSI mieć: \n"
 		"- script: 1–3 zdania głośnego czytania (bez znaczników czasu). \n"
-		"- image_description: 1–3 zdania opisu fotorealistycznego kadru bez jakiegokolwiek tekstu na obrazie. \n"
-		"Styl/nastrój: gawęda sarmacka (pierwsza osoba, obrazowe anegdoty, lekko archaiczne słownictwo, zrozumiałe dziś).\n"
+		"- image_description: 1–3 zdania opisu fotorealistycznego kadru bez jakiegokolwiek tekstu na obrazie. Dodaj informację o kolorach, stylu, nastroju, a take szczegóły dotyczące postaci lub scenerii tak aby wszystkie obrazy tworzyły spójny obraz opowiadanej historii. \n"
 		"Zwróć wyłącznie JSON o schemacie: {\"topic\": str, \"scenes\": [{\"script\": str, \"image_description\": str}, ...]}"
 	)
 	return base
