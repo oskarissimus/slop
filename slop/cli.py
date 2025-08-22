@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Optional
+import logging
+import sys
 
 import typer
 from rich.console import Console
@@ -18,8 +20,20 @@ console = Console()
 app = typer.Typer(help="slop - AI video generator", no_args_is_help=False)
 
 
+def _configure_logging() -> None:
+    # Configure root logger to INFO and stream to stdout for GH Actions visibility
+    if not logging.getLogger().handlers:
+        handler = logging.StreamHandler(stream=sys.stdout)
+        formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s")
+        handler.setFormatter(formatter)
+        root = logging.getLogger()
+        root.setLevel(logging.INFO)
+        root.addHandler(handler)
+
+
 def ensure_env_loaded() -> None:
     load_dotenv()
+    _configure_logging()
 
 
 def validate_required_env() -> None:

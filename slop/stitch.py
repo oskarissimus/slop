@@ -25,7 +25,10 @@ def _compute_durations_from_alignment(
 ) -> List[float]:
     """Compute per-image durations using character-level alignment only.
 
-    Requires alignment to include characters and per-character start/end times.
+    We split the characters into nearly-equal contiguous groups per image and
+    set each image duration to span from the first character's start to the
+    last character's end in that group. This reflects character-level timing
+    from ElevenLabs alignment.
     """
     if not isinstance(alignment, dict):
         raise ValueError("alignment must be provided and be a dict with character-level timings")
@@ -39,33 +42,42 @@ def _compute_durations_from_alignment(
     if not (len(characters) == len(start_times) == len(end_times) and len(characters) > 0):
         raise ValueError("alignment character arrays must be same non-zero length")
 
+    total_chars = len(characters)
+    total_images = max(1, num_images)
+
     logger.info(
-        "[stitch] alignment received | chars=%d first_start=%.3f last_end=%.3f",
-        len(characters),
+        "[stitch] alignment received | chars=%d images=%d first_start=%.3f last_end=%.3f",
+        total_chars,
+        total_images,
         float(start_times[0]),
         float(end_times[-1]),
     )
 
-    # Build simple segments from per-character timings
-    segments = [{"start": float(s), "end": float(e)} for s, e in zip(start_times, end_times)]
-
-    total_duration_seconds = max(audio_duration_fallback, float(end_times[-1]))
-    bin_edges = [i * (total_duration_seconds / max(1, num_images)) for i in range(max(1, num_images) + 1)]
+    # Compute per-image group sizes (nearly equal partitioning of characters)
+    base = total_chars // total_images
+    remainder = total_chars % total_images
+    group_sizes: List[int] = [(base + 1 if i < remainder else base) for i in range(total_images)]
 
     durations: List[float] = []
-    for i in range(max(1, num_images)):
-        bin_start = bin_edges[i]
-        bin_end = bin_edges[i + 1]
-        overlap_sum = 0.0
-        for seg in segments:
-            s = seg["start"]
-            e = seg["end"]
-            overlap = max(0.0, min(bin_end, e) - max(bin_start, s))
-            overlap_sum += overlap
-        durations.append(max(0.1, overlap_sum or (total_duration_seconds / max(1, num_images))))
+    char_index = 0
+    total_duration_seconds = max(audio_duration_fallback, float(end_times[-1]))
 
+    for i, size in enumerate(group_sizes):
+        if size > 0:
+            start_idx = char_index
+            end_idx = char_index + size - 1
+            start_t = float(start_times[start_idx])
+            end_t = float(end_times[end_idx])
+            dur = max(0.1, end_t - start_t)
+            durations.append(dur)
+            char_index += size
+        else:
+            # No characters assigned to this image; assign a reasonable slice
+            durations.append(max(0.1, total_duration_seconds / total_images))
+
+    # In rare cases, rounding can produce total > audio; that's acceptable for slideshow timing
     logger.info(
-        "[stitch] computed durations | count=%d total=%.3f first=%.3f last=%.3f",
+        "[stitch] durations by character chunks | count=%d sum=%.3f first=%.3f last=%.3f",
         len(durations),
         sum(durations),
         durations[0],
