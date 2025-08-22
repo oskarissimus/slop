@@ -3,13 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
 import os
 import json
 
-from .config import AppConfig, apply_env_overrides
+from .config import AppConfig
 from .utils import sanitize_title
-from .scriptgen import generate_topic_and_scenes, Scene
+from .scriptgen import generate_topic_and_scenes
 from .images import generate_images
 from .voice import synthesize_voice_with_alignment
 from .stitch import stitch_video
@@ -24,8 +23,6 @@ class GeneratedVideo:
 
 def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVideo:
     output_dir.mkdir(parents=True, exist_ok=True)
-    # Apply environment overrides for test/production model switching
-    config = apply_env_overrides(config)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     basename = f"video_{timestamp}"
@@ -59,14 +56,13 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
     image_prompts = [s.image_description for s in scenes]
     script_text = " ".join(s.script for s in scenes).strip()
 
-    # 4) Generate images asynchronously per scene (provider-configurable)
+    # 4) Generate images asynchronously per scene
     image_paths = generate_images(
         image_prompts=image_prompts,
         num_images=config.num_images,
         output_dir=work_dir,
-        provider=config.image_provider,
         image_model=config.image_model,
-        image_size=config.image_size,
+        image_size=f"{config.resolution_width}x{config.resolution_height}",
         image_quality=config.image_quality,
     )
 

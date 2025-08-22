@@ -9,38 +9,6 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import AsyncOpenAI
 
 
-def _fallback_generate_placeholder(text: str, output_dir: Path, index: int) -> Path:
-	output_path = output_dir / f"frame_{index:03d}.png"
-	width, height = 1080, 1920
-	# Plain background without any text to avoid on-frame captions
-	try:
-		from PIL import Image, ImageDraw
-		# Use a mid-gray background so it's not perceived as black
-		image = Image.new("RGB", (width, height), color=(80, 80, 80))
-		draw = ImageDraw.Draw(image)
-		# add a subtle vignette rectangle to make placeholder less flat
-		margin = 40
-		draw.rectangle([margin, margin, width - margin, height - margin], outline=(180, 180, 180), width=4)
-		# draw two diagonal lines to add some structure
-		draw.line([(0, 0), (width, height)], fill=(130, 130, 130), width=3)
-		draw.line([(width, 0), (0, height)], fill=(130, 130, 130), width=3)
-		image.save(output_path)
-		try:
-			print(f"[images] placeholder saved: {output_path}")
-		except Exception:
-			pass
-	except Exception:
-		# If Pillow is not available, write a minimal PNG header with no content using raw bytes is complex;
-		# instead, just create an empty file as a last resort placeholder.
-		with open(output_path, "wb") as f:
-			f.write(b"")
-		try:
-			print(f"[images] placeholder (no Pillow) wrote empty file: {output_path}")
-		except Exception:
-			pass
-	return output_path
-
-
 @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3))
 async def _generate_single_image_openai_async(
 	client: AsyncOpenAI,
@@ -60,31 +28,9 @@ async def _generate_single_image_openai_async(
 		"size": size,
 		"n": 1,
 	}
-	if quality:
-		params["quality"] = quality
-	try:
-		try:
-			print(f"[images/openai] request i={index} model={model} size={size} quality={quality} prompt_len={len(prompt)}")
-		except Exception:
-			pass
-		resp = await client.images.generate(**params)
-		b64 = resp.data[0].b64_json
-		img_bytes = base64.b64decode(b64)
-	except Exception:
-		# Secondary attempt with gpt-image-1 if not already used
-		fallback_model = "gpt-image-1" if model != "gpt-image-1" else "dall-e-3"
-		try:
-			print(f"[images/openai] fallback i={index} -> model={fallback_model}")
-		except Exception:
-			pass
-		resp = await client.images.generate(
-			model=fallback_model,
-			prompt=prompt,
-			size=size,
-			n=1,
-		)
-		b64 = resp.data[0].b64_json
-		img_bytes = base64.b64decode(b64)
+	resp = await client.images.generate(**params)
+	b64 = resp.data[0].b64_json
+	img_bytes = base64.b64decode(b64)
 	out_path = output_dir / f"frame_{index:03d}.png"
 	with open(out_path, "wb") as f:
 		f.write(img_bytes)
@@ -133,10 +79,9 @@ def generate_images(
 	image_prompts: Optional[List[str]] = None,
 	num_images: int,
 	output_dir: Path,
-	provider: str = "openai",
-	image_model: str = "dall-e-3",
-	image_size: str = "1024x1536",
-	image_quality: Optional[str] = "standard",
+	image_model: str,
+	image_size: str,
+	image_quality: str,
 ) -> List[Path]:
 	output_dir.mkdir(parents=True, exist_ok=True)
 	if image_prompts is None:
@@ -152,7 +97,7 @@ def generate_images(
 	try:
 		preview = (scene_prompts[0] if scene_prompts else "")[:160].replace("\n", " ")
 		print(
-			f"[images] provider={provider} model={image_model} size={image_size} quality={image_quality} "
+			f"[images] model={image_model} size={image_size} quality={image_quality} "
 			f"num_images={num_images} first_prompt_preview=\"{preview}\""
 		)
 	except Exception:
@@ -170,26 +115,19 @@ def generate_images(
 	# Always use async for OpenAI image generation with a conservative concurrency cap.
 	concurrency = min(12, max(1, len(scene_prompts)))
 
-	if provider == "openai":
-		paths = asyncio.run(
-			_generate_images_async_openai(
-				scene_prompts, output_dir, concurrency, model=image_model, size=image_size, quality=image_quality
-			)
+	paths = asyncio.run(
+		_generate_images_async_openai(
+			scene_prompts, output_dir, concurrency, model=image_model, size=image_size, quality=image_quality
 		)
-		# Print sizes for quick diagnostics
-		try:
-			for p in paths:
-				print(f"[images] file {p} -> {os.path.getsize(p)} bytes")
-		except Exception:
-			pass
-		return paths
+	)
+	# Print sizes for quick diagnostics
+	try:
+		for p in paths:
+			print(f"[images] file {p} -> {os.path.getsize(p)} bytes")
+	except Exception:
+		pass
+	return paths
 
-	# Placeholder provider uses a simple synchronous loop
-	image_paths: List[Path] = []
-	for i, p in enumerate(scene_prompts):
-		image_paths.append(_fallback_generate_placeholder(p, output_dir, i))
-
-	return image_paths
 
 
 async def _generate_images_async_openai(
@@ -199,7 +137,7 @@ async def _generate_images_async_openai(
 	*,
 	model: str,
 	size: str,
-	quality: Optional[str],
+	quality: str,
 ) -> List[Path]:
 	client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 	semaphore = asyncio.Semaphore(concurrency)

@@ -23,7 +23,7 @@ def main():
 		"Fotorealistyczna zimowa tundra o zmierzchu, śnieżna zamieć, husky w zaprzęgu, miękkie filmowe światło, pionowy kadr 9:16, brak tekstu.",
 		"Wnętrze drewnianej chaty oświetlonej ogniem, stół z mapą i kompasem, detal dłoni przesuwającej figurę, głębia ostrości, brak tekstu.",
 	]
-	paths = generate_images(image_prompts=image_prompts, num_images=2, output_dir=out_dir, provider="openai")
+	paths = generate_images(image_prompts=image_prompts, num_images=2, output_dir=out_dir)
 	for p in paths:
 		size = parse_png_size(Path(p))
 		if size:
