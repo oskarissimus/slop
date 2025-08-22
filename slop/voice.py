@@ -7,6 +7,7 @@ import base64
 import logging
 
 from elevenlabs.client import ElevenLabs
+from elevenlabs.types.voice_settings import VoiceSettings
 
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ def _extract_alignment(response: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
-def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, *, model_id: str, output_format: str) -> Tuple[Path, Optional[Dict[str, Any]]]:
+def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, *, model_id: str, output_format: str, style: float) -> Tuple[Path, Optional[Dict[str, Any]]]:
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / "voice.mp3"
 
@@ -96,6 +97,7 @@ def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, 
         text=text,
         model_id=model_id,
         output_format=output_format,
+        voice_settings=VoiceSettings(style=style)
     )
 
     # Debug: log which attributes exist on the response

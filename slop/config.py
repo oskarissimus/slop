@@ -15,6 +15,7 @@ class AppConfig(BaseModel):
     num_images: int = 12
     image_provider: str = "openai"  # placeholder | openai
     voice_id: str = "pNInz6obpgDQGcFmaJgB"
+    style: float = 0.34
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
     #pNInz6obpgDQGcFmaJgB - sarmata

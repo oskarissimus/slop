@@ -77,6 +77,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         output_dir=work_dir,
         model_id=config.tts_model_id,
         output_format=config.tts_output_format,
+        style=config.style,
     )
 
     # 6) Stitch video, using alignment to time images if available
