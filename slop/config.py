@@ -23,7 +23,7 @@ class AppConfig(BaseModel):
     chat_model: str = "gpt-4o-mini"
     scene_llm_model: str = "gpt-4o-mini"
     image_model: str = "gpt-image-1"
-    image_quality: Literal["low", "medium", "high"] = "low"
+    image_quality: Literal["low", "medium", "high"] = "medium"
     tts_model_id: str = "eleven_v3"
     tts_output_format: str = "mp3_44100_128"
 
