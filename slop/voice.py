@@ -7,6 +7,8 @@ import base64
 import logging
 
 from elevenlabs.client import ElevenLabs
+from elevenlabs.types.audio_with_timestamps_response import AudioWithTimestampsResponse
+from elevenlabs.types.character_alignment_response_model import CharacterAlignmentResponseModel
 from elevenlabs.types.voice_settings import VoiceSettings
 
 
@@ -32,51 +34,11 @@ def _extract_audio_base64(response: Any) -> Optional[str]:
     return None
 
 
-def _to_dict_maybe(model_like: Any) -> Optional[Dict[str, Any]]:
-    """Convert a pydantic/dataclass-like model to dict if possible."""
-    if model_like is None:
-        return None
-    if isinstance(model_like, dict):
-        return model_like
-    # pydantic v2
-    fn = getattr(model_like, "model_dump", None)
-    if callable(fn):
-        try:
-            return fn()
-        except Exception:
-            pass
-    # pydantic v1 / generic
-    fn = getattr(model_like, "dict", None)
-    if callable(fn):
-        try:
-            return fn()
-        except Exception:
-            pass
-    return None
 
 
-def _extract_alignment(response: Any) -> Optional[Dict[str, Any]]:
-    """Extract alignment dict, preferring normalized_alignment when present."""
-    if response is None:
-        return None
-    # Mapping-like
-    if isinstance(response, dict):
-        for key in ("normalized_alignment", "alignment"):
-            val = response.get(key)
-            d = _to_dict_maybe(val)
-            if d:
-                return d
-        return None
-    # Object-like
-    for attr in ("normalized_alignment", "alignment"):
-        val = getattr(response, attr, None)
-        d = _to_dict_maybe(val)
-        if d:
-            return d
-    return None
 
 
-def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, *, model_id: str, output_format: str, style: float) -> Tuple[Path, Optional[Dict[str, Any]]]:
+def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, *, model_id: str, output_format: str, style: float) -> Tuple[Path, CharacterAlignmentResponseModel]:
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / "voice.mp3"
 
@@ -99,7 +61,6 @@ def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, 
         output_format=output_format,
         voice_settings=VoiceSettings(style=style)
     )
-
     # Debug: log which attributes exist on the response
     try:
         keys_or_attrs = list(response.keys()) if isinstance(response, dict) else dir(response)
@@ -108,7 +69,6 @@ def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, 
         pass
 
     audio_b64 = _extract_audio_base64(response)
-    alignment: Optional[Dict[str, Any]] = _extract_alignment(response)
 
     if not audio_b64:
         keys_or_attrs = list(response.keys()) if isinstance(response, dict) else dir(response)
@@ -132,30 +92,9 @@ def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, 
         "[tts] saved audio | path=%s size_bytes=%d alignment_chars=%s",
         str(out_path),
         len(audio_bytes),
-        len(alignment.get("characters", [])) if isinstance(alignment, dict) else "n/a",
     )
 
-    # Log alignment summary if available
-    if isinstance(alignment, dict):
-        try:
-            chars = alignment.get("characters", []) or []
-            starts = alignment.get("character_start_times_seconds", []) or []
-            ends = alignment.get("character_end_times_seconds", []) or []
-            logger.info(
-                "[tts] alignment | characters=%d first_start=%.3f last_end=%.3f",
-                len(chars),
-                float(starts[0]) if starts else -1.0,
-                float(ends[-1]) if ends else -1.0,
-            )
-        except Exception:
-            logger.debug("[tts] alignment summary logging failed", exc_info=True)
 
-    return out_path, alignment
+    return out_path, response.alignment
 
 
-def synthesize_voice(text: str, voice_id: str, output_dir: Path) -> Path:
-    # Backwards-compatible wrapper using production defaults
-    api_model = os.getenv("ELEVENLABS_TTS_MODEL", "eleven_multilingual_v2")
-    api_format = os.getenv("ELEVENLABS_TTS_FORMAT", "mp3_44100_128")
-    path, _ = synthesize_voice_with_alignment(text, voice_id, output_dir, model_id=api_model, output_format=api_format)
-    return path

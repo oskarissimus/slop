@@ -1,84 +1,48 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 import subprocess
-import tempfile
 import logging
+
+from elevenlabs.types.character_alignment_response_model import CharacterAlignmentResponseModel
 
 from .scriptgen import Scene
 
 
 logger = logging.getLogger(__name__)
 
-
-def _ffmpeg_bin() -> str:
-    return "ffmpeg"
-
-
-def _ffprobe_bin() -> str:
-    return "ffprobe"
-
-
-def _compute_durations_from_alignment(
-    alignment: Optional[Dict[str, Any]],
-    scenes: List[Scene],
-    audio_duration_fallback: float,
-) -> List[float]:
-    """Compute per-image durations using character-level alignment per scene.
-
-    The combined TTS input is " ".join(scene.script for scene in scenes).strip().
-    We map each scene to a contiguous character index range in the combined text
-    and compute the scene duration as (last_char_end - first_char_start).
+def calculate_scenes_start_times(alignment: CharacterAlignmentResponseModel, scenes: List[Scene]) -> List[float]:
     """
-    if not isinstance(alignment, dict):
-        raise ValueError("alignment must be provided and be a dict with character-level timings")
-    if not scenes:
-        raise ValueError("scenes must be provided")
+    Calculate the start times of each scene based on the alignment.
+    """
+    scenes_start_times = [0]
+    i = 0
+    for scene in scenes:
+        i+=len(scene.script)+1
+        if i < len(alignment.character_start_times_seconds):
+            scenes_start_times.append(alignment.character_start_times_seconds[i])
+        else:
+            logger.warning("[stitch] scene script is longer than alignment | scene=%s", scene.script)
+            scenes_start_times.append(alignment.character_end_times_seconds[-1])
+    return scenes_start_times
 
-    characters = alignment.get("characters")
-    start_times = alignment.get("character_start_times_seconds")
-    end_times = alignment.get("character_end_times_seconds")
 
-    if not (isinstance(characters, list) and isinstance(start_times, list) and isinstance(end_times, list)):
-        raise ValueError("alignment missing required character-level keys")
-    if not (len(characters) == len(start_times) == len(end_times) and len(characters) > 0):
-        raise ValueError("alignment character arrays must be same non-zero length")
+def build_concat_list_content(image_paths: List[Path], durations: List[float]) -> str:
+    if not image_paths:
+        raise ValueError("image_paths must not be empty")
 
-    combined_text = " ".join(s.script for s in scenes).strip()
-    if len(combined_text) != len(characters):
-        logger.warning(
-            "[stitch] combined_text length != characters length | combined=%d chars=%d",
-            len(combined_text), len(characters)
-        )
-    # Compute index ranges for each scene based on join with single spaces
-    ranges: List[tuple[int, int]] = []
-    offset = 0
-    for idx, scene in enumerate(scenes):
-        scene_text = scene.script
-        start_idx = offset
-        end_idx_exclusive = start_idx + len(scene_text)
-        ranges.append((start_idx, end_idx_exclusive))
-        offset = end_idx_exclusive
-        if idx < len(scenes) - 1:
-            offset += 1  # single space between scenes
+    lines: List[str] = []
+    for img, duration in zip(image_paths, durations):
+        abs_img = Path(img).resolve()
+        lines.append(f"file {abs_img}")
+        lines.append(f"duration {duration}")
 
-    durations: List[float] = []
-    for (start_idx, end_idx_exclusive) in ranges:
-        if start_idx < 0 or end_idx_exclusive <= start_idx or end_idx_exclusive > len(characters):
-            raise ValueError("scene index range is out of alignment bounds")
-        first_start = float(start_times[start_idx])
-        last_end = float(end_times[end_idx_exclusive - 1])
-        dur = max(0.1, last_end - first_start)
-        durations.append(dur)
+    # Repeat last frame without duration to flush concat demuxer timing
+    abs_last = Path(image_paths[-1]).resolve()
+    lines.append(f"file {abs_last}")
 
-    total_duration_seconds = max(audio_duration_fallback, float(end_times[-1]))
-    logger.info(
-        "[stitch] durations by scenes | scenes=%d sum=%.3f audio=%.3f first=%.3f last=%.3f",
-        len(durations), sum(durations), total_duration_seconds, durations[0], durations[-1]
-    )
-
-    return durations
+    return "\n".join(lines) + "\n"
 
 
 def stitch_video(
@@ -89,11 +53,11 @@ def stitch_video(
     height: int,
     fps: int,
     *,
-    alignment: Optional[Dict[str, Any]] = None,
+    alignment: CharacterAlignmentResponseModel,
     scenes: Optional[List[Scene]] = None,
+    show_clock: bool = False,
 ):
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    ffmpeg = _ffmpeg_bin()
 
     total_images = max(1, len(image_paths))
     logger.info(
@@ -109,10 +73,8 @@ def stitch_video(
     if not scenes or len(scenes) != total_images:
         raise ValueError("scenes must be provided and match number of images")
 
-    # Probe audio duration (raise on failure)
-    ffprobe = _ffprobe_bin()
     probe_cmd = [
-        ffprobe,
+        "ffprobe",
         "-v",
         "error",
         "-show_entries",
@@ -126,56 +88,73 @@ def stitch_video(
     logger.info("[stitch] probed audio duration | seconds=%.3f", audio_duration)
 
     # Compute per-image durations from alignment by scenes
-    durations = _compute_durations_from_alignment(alignment, scenes, audio_duration)
+    scenes_start_times = calculate_scenes_start_times(alignment, scenes)
+    durations = [scenes_start_times[i+1] - scenes_start_times[i] for i in range(len(scenes_start_times)-1)]
+    durations.append(audio_duration - scenes_start_times[-1])
+    logger.info("[stitch] computed durations | durations=%s", durations)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        list_path = Path(tmpdir) / "images.txt"
-        with open(list_path, "w", encoding="utf-8") as f:
-            for img, dur in zip(image_paths, durations):
-                abs_img = Path(img).resolve()
-                f.write(f"file {abs_img}\n")
-                f.write(f"duration {dur}\n")
-            # Repeat last frame without duration to flush concat demuxer timing
-            abs_last = Path(image_paths[-1]).resolve()
-            f.write(f"file {abs_last}\n")
 
-        logger.info("[stitch] concatenating images into silent video | list=%s", str(list_path))
-        interim_video = Path(tmpdir) / "video_silent.mp4"
-        cmd_video = [
-            ffmpeg,
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            str(list_path),
-            "-vf",
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},format=yuv420p",
-            "-r",
-            str(fps),
-            "-pix_fmt",
-            "yuv420p",
-            str(interim_video),
-        ]
-        subprocess.run(cmd_video, check=True)
+    # Save images.txt to disk in the same directory as the output video
+    list_path = output_path.parent / "images.txt"
+    content = build_concat_list_content(image_paths, durations)
+    list_path.write_text(content, encoding="utf-8")
 
-        logger.info("[stitch] muxing video with audio | video=%s audio=%s", str(interim_video), str(audio_path))
-        cmd_mux = [
-            ffmpeg,
-            "-y",
-            "-i",
-            str(interim_video),
-            "-i",
-            str(audio_path),
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac",
-            "-shortest",
-            str(output_path),
-        ]
-        subprocess.run(cmd_mux, check=True)
+    logger.info("[stitch] concatenating images into silent video | list=%s", str(list_path))
+    # Build video filter chain and optionally overlay a running clock
+    base_filter = (
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},format=yuv420p"
+    )
+    if show_clock:
+        # Reasonable font size relative to height; bottom-right with padding
+        font_size = max(height // 32, 24)
+        clock_filter = (
+            "drawtext="
+            f"fontcolor=white:fontsize={font_size}:"
+            "box=1:boxcolor=black@0.5:boxborderw=6:"
+            "text='%{pts\\:hms}':x=w-tw-24:y=h-th-24"
+        )
+        vf_filter = f"{base_filter},{clock_filter}"
+        logger.info("[stitch] clock overlay enabled | fontsize=%d", font_size)
+    else:
+        vf_filter = base_filter
+
+    interim_video = output_path.parent / "video_silent.mp4"
+    cmd_video = [
+        "ffmpeg",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(list_path),
+        "-vf",
+        vf_filter,
+        "-r",
+        str(fps),
+        "-pix_fmt",
+        "yuv420p",
+        str(interim_video),
+    ]
+    subprocess.run(cmd_video, check=True)
+
+    logger.info("[stitch] muxing video with audio | video=%s audio=%s", str(interim_video), str(audio_path))
+    cmd_mux = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(interim_video),
+        "-i",
+        str(audio_path),
+        "-c:v",
+        "libx264",
+        "-c:a",
+        "aac",
+        "-shortest",
+        str(output_path),
+    ]
+    subprocess.run(cmd_mux, check=True)
 
     logger.info("[stitch] done | output=%s", str(output_path))
     return output_path
