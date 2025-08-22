@@ -42,10 +42,24 @@ def generate_and_upload(
     load_dotenv()
     _validate_required_env()
 
+    # Auto-read default prompt if PROMPT is unset
+    if not os.getenv("PROMPT"):
+        default_prompt_path = Path.cwd() / "prompt.txt"
+        if default_prompt_path.exists():
+            try:
+                content = default_prompt_path.read_text(encoding="utf-8").strip()
+                if content:
+                    os.environ["PROMPT"] = content
+            except Exception:
+                pass
+
     output_dir = Path(output_dir)
     credentials_dir = Path(credentials_dir)
 
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Surface credentials dir to analytics/uploader
+    os.environ.setdefault("YOUTUBE_CREDENTIALS_DIR", str(credentials_dir))
 
     config = AppConfig()
     result = generate_video_pipeline(config=config, output_dir=output_dir)
