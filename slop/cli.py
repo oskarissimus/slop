@@ -73,6 +73,19 @@ def _default(
             raise typer.Exit(code=1)
         if content:
             os.environ["PROMPT"] = content
+    else:
+        # Auto-read ./prompt.txt if present and PROMPT not set
+        if not os.getenv("PROMPT"):
+            default_prompt_path = Path.cwd() / "prompt.txt"
+            if default_prompt_path.exists():
+                try:
+                    content = default_prompt_path.read_text(encoding="utf-8").strip()
+                    if content:
+                        os.environ["PROMPT"] = content
+                except Exception:
+                    pass
+    # Surface credentials dir to analytics and uploader
+    os.environ.setdefault("YOUTUBE_CREDENTIALS_DIR", credentials_dir)
     # Always use in-memory defaults; no file-based config
     config = AppConfig()
     Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -136,6 +149,17 @@ def run_once(
             raise typer.Exit(code=1)
         if content:
             os.environ["PROMPT"] = content
+    else:
+        if not os.getenv("PROMPT"):
+            default_prompt_path = Path.cwd() / "prompt.txt"
+            if default_prompt_path.exists():
+                try:
+                    content = default_prompt_path.read_text(encoding="utf-8").strip()
+                    if content:
+                        os.environ["PROMPT"] = content
+                except Exception:
+                    pass
+    os.environ.setdefault("YOUTUBE_CREDENTIALS_DIR", credentials_dir)
     config = AppConfig()
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     result = generate_video_pipeline(config=config, output_dir=Path(output_dir))

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 import json
+import os
+from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 from openai import OpenAI
@@ -12,6 +14,7 @@ from .prompts import (
     COMBINED_GENERATION_SYSTEM_MESSAGE,
     get_combined_generation_user_prompt,
 )
+from .youtube_analytics import YouTubeAnalytics
 
 
 class Scene(BaseModel):
@@ -39,8 +42,30 @@ def generate_topic_and_scenes(
     words_per_second = 2.5
     target_words = int(target_duration_seconds * words_per_second)
 
+    # Detect BAU trigger and, if present, build analytics-driven context
+    bau_triggered = bool(input_text) and ("business as usual" in (input_text or "").lower())
+    if bau_triggered:
+        try:
+            credentials_dir = Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd())))
+            yt = YouTubeAnalytics(credentials_dir=credentials_dir)
+            videos = yt.fetch_recent_uploads_with_stats(max_videos=30, max_comments_per_video=3)
+            summary = yt.build_summary(videos, max_items=10)
+            input_for_prompt = (
+                "Tryb 'business as usual': zignoruj dosłowne wejście użytkownika. "
+                "Na podstawie poniższej analizy wyników mojego kanału YouTube zaproponuj NOWY temat, "
+                "który maksymalizuje zaangażowanie (wyświetlenia, polubienia, komentarze). "
+                "Wyciągnij wzorce (motywy, stylistyka, słowa kluczowe) i zaproponuj świeży wariant, "
+                "bez kopiowania istniejących tytułów.\n\n"
+                f"{summary}"
+            )
+        except Exception:
+            # Fallback to original input if analytics are unavailable
+            input_for_prompt = input_text or ""
+    else:
+        input_for_prompt = input_text or ""
+
     system_msg = COMBINED_GENERATION_SYSTEM_MESSAGE
-    user_msg = get_combined_generation_user_prompt(input_text or "", target_words, num_scenes)
+    user_msg = get_combined_generation_user_prompt(input_for_prompt, target_words, num_scenes)
     resp = client.chat.completions.create(
         model=model,
         messages=[
