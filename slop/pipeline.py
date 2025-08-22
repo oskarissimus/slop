@@ -88,6 +88,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         height=config.resolution_height,
         fps=config.fps,
         alignment=alignment,
+        scenes=scenes,
     )
 
     return GeneratedVideo(video_path=video_path, topic=topic, script_text=script_text)
