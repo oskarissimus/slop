@@ -55,6 +55,14 @@ def apply_env_overrides(config: AppConfig) -> AppConfig:
     config.tts_model_id = os.getenv("ELEVENLABS_TTS_MODEL", config.tts_model_id)
     config.tts_output_format = os.getenv("ELEVENLABS_TTS_FORMAT", config.tts_output_format)
 
+    if config.environment_mode == "production":
+        # Enforce medium quality in production: map any explicit high/hd to standard
+        q = os.getenv("OPENAI_IMAGE_QUALITY", "standard")
+        if isinstance(q, str) and q.strip().lower() in {"hd", "high"}:
+            config.image_quality = "standard"
+        else:
+            config.image_quality = q
+
     if config.environment_mode == "test":
         # In tests, only reduce image generation cost by lowering quality.
         # Keep all other settings identical to production unless explicitly overridden by env.

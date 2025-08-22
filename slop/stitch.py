@@ -23,7 +23,6 @@ def _ffprobe_bin() -> str:
 def _compute_durations_from_alignment(
     alignment: Optional[Dict[str, Any]],
     scenes: List[Scene],
-    audio_duration_fallback: float,
 ) -> List[float]:
     """Compute per-image durations using character-level alignment per scene.
 
@@ -72,10 +71,11 @@ def _compute_durations_from_alignment(
         dur = max(0.1, last_end - first_start)
         durations.append(dur)
 
-    total_duration_seconds = max(audio_duration_fallback, float(end_times[-1]))
     logger.info(
-        "[stitch] durations by scenes | scenes=%d sum=%.3f audio=%.3f first=%.3f last=%.3f",
-        len(durations), sum(durations), total_duration_seconds, durations[0], durations[-1]
+        "[stitch] durations by scenes | scenes=%d sum=%.3f list=%s",
+        len(durations),
+        sum(durations),
+        ",".join(f"{d:.3f}" for d in durations),
     )
 
     return durations
@@ -126,7 +126,7 @@ def stitch_video(
     logger.info("[stitch] probed audio duration | seconds=%.3f", audio_duration)
 
     # Compute per-image durations from alignment by scenes
-    durations = _compute_durations_from_alignment(alignment, scenes, audio_duration)
+    durations = _compute_durations_from_alignment(alignment, scenes)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         list_path = Path(tmpdir) / "images.txt"
