@@ -11,9 +11,6 @@ on:
       mode:
         description: "Tryb uruchomienia: production | test (opcjonalny, domyślnie production)"
         required: false
-  push:
-    branches:
-      - '**'
 
 concurrency:
   group: slop-daily
