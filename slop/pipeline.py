@@ -24,7 +24,7 @@ class GeneratedVideo:
 
 def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVideo:
     output_dir.mkdir(parents=True, exist_ok=True)
-    # Apply environment overrides for test/production model switching
+    # Apply minimal environment overrides (no modes)
     config = apply_env_overrides(config)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -62,7 +62,6 @@ def _default(
     privacy_status: str = typer.Option("public", help="YouTube privacy: public | unlisted | private"),
     thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to thumbnail image"),
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
-    mode: Optional[str] = typer.Option(None, help="Override SLOP_MODE: production | test"),
     prompt: Optional[str] = typer.Option(None, help="Pojedynczy input: na jego podstawie w jednym zapytaniu powstaje topic i sceny"),
     prompt_file: Optional[str] = typer.Option(None, "--prompt-file", help="Ścieżka do pliku TXT zawierającego prompt (użyte, jeśli --prompt nie podano)"),
 ) -> None:
@@ -71,8 +70,6 @@ def _default(
     validate_required_env()
     if ctx.invoked_subcommand is not None:
         return
-    if mode:
-        os.environ["SLOP_MODE"] = mode
     if prompt:
         os.environ["PROMPT"] = prompt
     elif prompt_file:
@@ -140,15 +137,12 @@ def run_once(
     privacy_status: str = typer.Option("public", help="YouTube privacy: public | unlisted | private"),
     thumbnail_path: Optional[str] = typer.Option(None, help="Optional path to thumbnail image"),
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
-    mode: Optional[str] = typer.Option(None, help="Override SLOP_MODE: production | test"),
     prompt: Optional[str] = typer.Option(None, help="Pojedynczy input: na jego podstawie w jednym zapytaniu powstaje topic i sceny"),
     prompt_file: Optional[str] = typer.Option(None, "--prompt-file", help="Ścieżka do pliku TXT zawierającego prompt (użyte, jeśli --prompt nie podano)"),
 ) -> None:
     """Generate a single two-minute video now."""
     ensure_env_loaded()
     validate_required_env()
-    if mode:
-        os.environ["SLOP_MODE"] = mode
     if prompt:
         os.environ["PROMPT"] = prompt
     elif prompt_file:
