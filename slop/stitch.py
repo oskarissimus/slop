@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 import logging
 
+from .scriptgen import Scene
+
 
 logger = logging.getLogger(__name__)
 
@@ -20,18 +22,19 @@ def _ffprobe_bin() -> str:
 
 def _compute_durations_from_alignment(
     alignment: Optional[Dict[str, Any]],
-    num_images: int,
+    scenes: List[Scene],
     audio_duration_fallback: float,
 ) -> List[float]:
-    """Compute per-image durations using character-level alignment only.
+    """Compute per-image durations using character-level alignment per scene.
 
-    We split the characters into nearly-equal contiguous groups per image and
-    set each image duration to span from the first character's start to the
-    last character's end in that group. This reflects character-level timing
-    from ElevenLabs alignment.
+    The combined TTS input is " ".join(scene.script for scene in scenes).strip().
+    We map each scene to a contiguous character index range in the combined text
+    and compute the scene duration as (last_char_end - first_char_start).
     """
     if not isinstance(alignment, dict):
         raise ValueError("alignment must be provided and be a dict with character-level timings")
+    if not scenes:
+        raise ValueError("scenes must be provided")
 
     characters = alignment.get("characters")
     start_times = alignment.get("character_start_times_seconds")
@@ -42,46 +45,37 @@ def _compute_durations_from_alignment(
     if not (len(characters) == len(start_times) == len(end_times) and len(characters) > 0):
         raise ValueError("alignment character arrays must be same non-zero length")
 
-    total_chars = len(characters)
-    total_images = max(1, num_images)
-
-    logger.info(
-        "[stitch] alignment received | chars=%d images=%d first_start=%.3f last_end=%.3f",
-        total_chars,
-        total_images,
-        float(start_times[0]),
-        float(end_times[-1]),
-    )
-
-    # Compute per-image group sizes (nearly equal partitioning of characters)
-    base = total_chars // total_images
-    remainder = total_chars % total_images
-    group_sizes: List[int] = [(base + 1 if i < remainder else base) for i in range(total_images)]
+    combined_text = " ".join(s.script for s in scenes).strip()
+    if len(combined_text) != len(characters):
+        logger.warning(
+            "[stitch] combined_text length != characters length | combined=%d chars=%d",
+            len(combined_text), len(characters)
+        )
+    # Compute index ranges for each scene based on join with single spaces
+    ranges: List[tuple[int, int]] = []
+    offset = 0
+    for idx, scene in enumerate(scenes):
+        scene_text = scene.script
+        start_idx = offset
+        end_idx_exclusive = start_idx + len(scene_text)
+        ranges.append((start_idx, end_idx_exclusive))
+        offset = end_idx_exclusive
+        if idx < len(scenes) - 1:
+            offset += 1  # single space between scenes
 
     durations: List[float] = []
-    char_index = 0
+    for (start_idx, end_idx_exclusive) in ranges:
+        if start_idx < 0 or end_idx_exclusive <= start_idx or end_idx_exclusive > len(characters):
+            raise ValueError("scene index range is out of alignment bounds")
+        first_start = float(start_times[start_idx])
+        last_end = float(end_times[end_idx_exclusive - 1])
+        dur = max(0.1, last_end - first_start)
+        durations.append(dur)
+
     total_duration_seconds = max(audio_duration_fallback, float(end_times[-1]))
-
-    for i, size in enumerate(group_sizes):
-        if size > 0:
-            start_idx = char_index
-            end_idx = char_index + size - 1
-            start_t = float(start_times[start_idx])
-            end_t = float(end_times[end_idx])
-            dur = max(0.1, end_t - start_t)
-            durations.append(dur)
-            char_index += size
-        else:
-            # No characters assigned to this image; assign a reasonable slice
-            durations.append(max(0.1, total_duration_seconds / total_images))
-
-    # In rare cases, rounding can produce total > audio; that's acceptable for slideshow timing
     logger.info(
-        "[stitch] durations by character chunks | count=%d sum=%.3f first=%.3f last=%.3f",
-        len(durations),
-        sum(durations),
-        durations[0],
-        durations[-1],
+        "[stitch] durations by scenes | scenes=%d sum=%.3f audio=%.3f first=%.3f last=%.3f",
+        len(durations), sum(durations), total_duration_seconds, durations[0], durations[-1]
     )
 
     return durations
@@ -96,6 +90,7 @@ def stitch_video(
     fps: int,
     *,
     alignment: Optional[Dict[str, Any]] = None,
+    scenes: Optional[List[Scene]] = None,
 ):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg = _ffmpeg_bin()
@@ -110,6 +105,9 @@ def stitch_video(
         height,
         fps,
     )
+
+    if not scenes or len(scenes) != total_images:
+        raise ValueError("scenes must be provided and match number of images")
 
     # Probe audio duration (raise on failure)
     ffprobe = _ffprobe_bin()
@@ -127,8 +125,8 @@ def stitch_video(
     audio_duration = float((result.stdout or "").strip())
     logger.info("[stitch] probed audio duration | seconds=%.3f", audio_duration)
 
-    # Compute per-image durations from alignment only
-    durations = _compute_durations_from_alignment(alignment, total_images, audio_duration)
+    # Compute per-image durations from alignment by scenes
+    durations = _compute_durations_from_alignment(alignment, scenes, audio_duration)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         list_path = Path(tmpdir) / "images.txt"
