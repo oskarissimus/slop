@@ -31,15 +31,48 @@ def _extract_audio_base64(response: Any) -> Optional[str]:
     return None
 
 
+def _to_dict_maybe(model_like: Any) -> Optional[Dict[str, Any]]:
+    """Convert a pydantic/dataclass-like model to dict if possible."""
+    if model_like is None:
+        return None
+    if isinstance(model_like, dict):
+        return model_like
+    # pydantic v2
+    fn = getattr(model_like, "model_dump", None)
+    if callable(fn):
+        try:
+            return fn()
+        except Exception:
+            pass
+    # pydantic v1 / generic
+    fn = getattr(model_like, "dict", None)
+    if callable(fn):
+        try:
+            return fn()
+        except Exception:
+            pass
+    return None
+
+
 def _extract_alignment(response: Any) -> Optional[Dict[str, Any]]:
-    """Extract alignment dict from response if present."""
+    """Extract alignment dict, preferring normalized_alignment when present."""
     if response is None:
         return None
+    # Mapping-like
     if isinstance(response, dict):
-        alignment = response.get("alignment")
-        return alignment if isinstance(alignment, dict) else None
-    alignment = getattr(response, "alignment", None)
-    return alignment if isinstance(alignment, dict) else None
+        for key in ("normalized_alignment", "alignment"):
+            val = response.get(key)
+            d = _to_dict_maybe(val)
+            if d:
+                return d
+        return None
+    # Object-like
+    for attr in ("normalized_alignment", "alignment"):
+        val = getattr(response, attr, None)
+        d = _to_dict_maybe(val)
+        if d:
+            return d
+    return None
 
 
 def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, *, model_id: str, output_format: str) -> Tuple[Path, Optional[Dict[str, Any]]]:
