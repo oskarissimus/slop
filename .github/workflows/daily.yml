@@ -11,6 +11,9 @@ on:
       mode:
         description: "Tryb uruchomienia: production | test (opcjonalny, domyślnie production)"
         required: false
+  push:
+    branches:
+      - '**'
 
 concurrency:
   group: slop-daily
@@ -54,10 +57,10 @@ jobs:
             echo "OPENAI_IMAGE_QUALITY=low" >> $GITHUB_ENV
           fi
 
-      - name: Generate (upload only in production)
+      - name: Generate (upload only on scheduled runs)
         run: |
           UPLOAD_FLAG=""
-          if [ "${{ github.event.inputs.mode }}" != "test" ]; then UPLOAD_FLAG="--upload"; fi
+          if [ "${{ github.event_name }}" = "schedule" ]; then UPLOAD_FLAG="--upload"; fi
           PROMPT_ARGS=""
           if [ -n "${{ github.event.inputs.prompt }}" ]; then
             PROMPT_ARGS="--prompt \"${{ github.event.inputs.prompt }}\""
