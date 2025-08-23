@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 import logging
 import sys
+from datetime import datetime, timezone, timedelta
 
 import typer
 from rich.console import Console
@@ -14,7 +15,7 @@ from .config import AppConfig
 from .pipeline import generate_video_pipeline
 from .youtube_uploader import YouTubeUploader, UploadMetadata
 from .utils import sanitize_title
-from .youtube_monitor import check_for_new_video_and_get_transcript
+from .youtube_monitor import check_for_new_video_and_get_transcript, YouTubePublicMonitor, fetch_transcript_text, parse_published_at_iso8601
 
 
 console = Console()
@@ -22,14 +23,17 @@ app = typer.Typer(help="slop - AI video generator", no_args_is_help=False)
 
 
 def _configure_logging() -> None:
-    # Configure root logger to INFO and stream to stdout for GH Actions visibility
-    if not logging.getLogger().handlers:
+    # Configure root logger and stream to stdout for GH Actions visibility
+    level_name = os.getenv("SLOP_LOG_LEVEL", "INFO").upper().strip()
+    level_value = getattr(logging, level_name, logging.INFO)
+    root = logging.getLogger()
+    if not root.handlers:
         handler = logging.StreamHandler(stream=sys.stdout)
         formatter = logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s")
         handler.setFormatter(formatter)
-        root = logging.getLogger()
-        root.setLevel(logging.INFO)
         root.addHandler(handler)
+    # Always set (or override) level based on env
+    root.setLevel(level_value)
 
 
 def ensure_env_loaded() -> None:
@@ -241,6 +245,49 @@ def generate_from_channel_if_new(
             console.print(f"[green]Uploaded to YouTube. Video ID: {new_video_id}")
         except Exception as e:
             console.print(f"[red]YouTube upload failed: {e}")
+
+
+@app.command()
+def discover(
+    channel_handle: str = typer.Option(..., help="YouTube channel handle (e.g., @SwaruuOficial) or channel ID (UC...)"),
+    credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
+    max_candidates: int = typer.Option(5, help="How many recent uploads to scan"),
+    freshness_hours: int = typer.Option(2400, help="Max age (hours) for a video to consider"),
+    preferred_languages: Optional[str] = typer.Option(None, help="Comma-separated language codes (e.g., es,en,pl)"),
+) -> None:
+    """Discovery-only: print recent uploads and whether a transcript is available.
+
+    Does NOT require OPENAI/ELEVENLABS keys and does not generate a video.
+    Requires YouTube OAuth credentials to list uploads.
+    """
+    ensure_env_loaded()
+
+    os.environ.setdefault("YOUTUBE_CREDENTIALS_DIR", credentials_dir)
+    creds_path = Path(credentials_dir)
+
+    monitor = YouTubePublicMonitor(credentials_dir=creds_path)
+    channel_id = monitor.resolve_channel_id(channel_handle)
+    if not channel_id:
+        console.print("[red]Failed to resolve channel; check handle or credentials.")
+        raise typer.Exit(code=1)
+
+    langs = [s.strip() for s in preferred_languages.split(",")] if preferred_languages else None
+
+    videos = monitor.fetch_recent_videos(channel_id, max_results=max_candidates)
+    if not videos:
+        console.print("[yellow]No recent videos found.")
+        raise typer.Exit(code=0)
+
+    now = datetime.now(timezone.utc)
+    console.print(f"[cyan]Channel ID: {channel_id}; candidates: {len(videos)}")
+    for v in videos:
+        pub_dt = parse_published_at_iso8601(v.published_at)
+        is_fresh = bool(pub_dt) and ((now - pub_dt) <= timedelta(hours=freshness_hours))
+        has_tx = False
+        if is_fresh:
+            tx = fetch_transcript_text(v.video_id, preferred_languages=langs)
+            has_tx = bool(tx)
+        console.print(f"{v.video_id} | {v.title} | {v.published_at} | fresh={is_fresh} | transcript={has_tx}")
 
 
 
