@@ -5,6 +5,7 @@ import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
+import os
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -36,13 +37,81 @@ class YouTubeUploader:
         self.client_secret_path = self.credentials_dir / "client_secret.json"
         self.token_path = self.credentials_dir / "token.json"
 
+    def _materialize_oauth_files_from_env(self) -> None:
+        """Best-effort: write client_secret.json and token.json from env vars if provided.
+
+        Supported env vars (checked in order):
+        - client secrets content: YOUTUBE_CLIENT_SECRETS, GOOGLE_OAUTH_CLIENT_JSON, YT_CLIENT_SECRET_JSON
+        - client secrets path: YOUTUBE_CLIENT_SECRETS_JSON, GOOGLE_OAUTH_CLIENT_JSON_PATH
+        - token content: YOUTUBE_TOKEN_JSON, YOUTUBE_OAUTH_TOKEN, GOOGLE_OAUTH_TOKEN_JSON, YT_TOKEN_JSON
+        - token path: YOUTUBE_TOKEN_JSON_PATH, GOOGLE_OAUTH_TOKEN_JSON_PATH
+        Values that look like JSON (start with '{') are treated as inline content; otherwise treated as paths.
+        """
+        # Client secrets
+        if not self.client_secret_path.exists():
+            candidates_content = [
+                os.getenv("YOUTUBE_CLIENT_SECRETS"),
+                os.getenv("GOOGLE_OAUTH_CLIENT_JSON"),
+                os.getenv("YT_CLIENT_SECRET_JSON"),
+            ]
+            candidates_path = [
+                os.getenv("YOUTUBE_CLIENT_SECRETS_JSON"),
+                os.getenv("GOOGLE_OAUTH_CLIENT_JSON_PATH"),
+            ]
+            content_value = next((v for v in candidates_content if v and v.strip()), None)
+            path_value = next((v for v in candidates_path if v and v.strip()), None)
+
+            try:
+                if content_value and content_value.strip().startswith("{"):
+                    self.client_secret_path.write_text(content_value, encoding="utf-8")
+                elif path_value:
+                    src = Path(path_value)
+                    if src.exists():
+                        self.client_secret_path.write_text(src.read_text(encoding="utf-8"))
+            except Exception:
+                # Best-effort only
+                pass
+
+        # Token
+        if not self.token_path.exists():
+            token_content_candidates = [
+                os.getenv("YOUTUBE_TOKEN_JSON"),
+                os.getenv("YOUTUBE_OAUTH_TOKEN"),
+                os.getenv("GOOGLE_OAUTH_TOKEN_JSON"),
+                os.getenv("YT_TOKEN_JSON"),
+            ]
+            token_path_candidates = [
+                os.getenv("YOUTUBE_TOKEN_JSON_PATH"),
+                os.getenv("GOOGLE_OAUTH_TOKEN_JSON_PATH"),
+            ]
+            t_content = next((v for v in token_content_candidates if v and v.strip()), None)
+            t_path = next((v for v in token_path_candidates if v and v.strip()), None)
+
+            try:
+                if t_content and t_content.strip().startswith("{"):
+                    self.token_path.write_text(t_content, encoding="utf-8")
+                elif t_path:
+                    tsrc = Path(t_path)
+                    if tsrc.exists():
+                        self.token_path.write_text(tsrc.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
     def _get_credentials(self) -> Credentials:
+        # Attempt to materialize OAuth files from env before reading
+        self._materialize_oauth_files_from_env()
+
         creds: Optional[Credentials] = None
         if self.token_path.exists():
             creds = Credentials.from_authorized_user_file(str(self.token_path), YOUTUBE_UPLOAD_SCOPES)
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
+                # Save refreshed token
+                try:
+                    self.token_path.write_text(creds.to_json())
+                except Exception:
+                    pass
             else:
                 if not self.client_secret_path.exists():
                     raise FileNotFoundError(
@@ -53,8 +122,11 @@ class YouTubeUploader:
                     str(self.client_secret_path), scopes=YOUTUBE_UPLOAD_SCOPES
                 )
                 creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            self.token_path.write_text(creds.to_json())
+                # Save the credentials for the next run
+                try:
+                    self.token_path.write_text(creds.to_json())
+                except Exception:
+                    pass
         return creds
 
     def _build_service(self):

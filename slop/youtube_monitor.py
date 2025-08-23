@@ -87,19 +87,53 @@ class YouTubePublicMonitor:
         yt = self._service()
         videos: list[ChannelLatestVideo] = []
         try:
-            resp = yt.search().list(part="snippet", channelId=channel_id, order="date", type="video", maxResults=max_results).execute()
-            for it in resp.get("items", []) or []:
-                vid = (it.get("id", {}) or {}).get("videoId", "")
-                sn = it.get("snippet", {}) or {}
-                if not vid:
-                    continue
-                videos.append(
-                    ChannelLatestVideo(
-                        video_id=vid,
-                        title=sn.get("title", ""),
-                        published_at=sn.get("publishedAt", ""),
+            # Resolve uploads playlist for the channel; this is more reliable than search
+            ch_resp = yt.channels().list(part="contentDetails", id=channel_id).execute()
+            uploads_playlist_id = None
+            items = ch_resp.get("items", [])
+            if items:
+                uploads_playlist_id = (items[0].get("contentDetails", {}) or {}).get("relatedPlaylists", {}).get("uploads")
+            if uploads_playlist_id:
+                next_page_token = None
+                while len(videos) < max_results:
+                    pl_resp = yt.playlistItems().list(
+                        part="snippet,contentDetails",
+                        playlistId=uploads_playlist_id,
+                        maxResults=min(50, max_results - len(videos)),
+                        pageToken=next_page_token,
+                    ).execute()
+                    for it in pl_resp.get("items", []) or []:
+                        vid = (it.get("contentDetails", {}) or {}).get("videoId", "")
+                        sn = it.get("snippet", {}) or {}
+                        if not vid:
+                            continue
+                        videos.append(
+                            ChannelLatestVideo(
+                                video_id=vid,
+                                title=sn.get("title", ""),
+                                published_at=sn.get("publishedAt", ""),
+                            )
+                        )
+                        if len(videos) >= max_results:
+                            break
+                    next_page_token = pl_resp.get("nextPageToken")
+                    if not next_page_token:
+                        break
+            # Fallback to search if uploads playlist not found or empty
+            if not videos:
+                resp = yt.search().list(part="snippet", channelId=channel_id, order="date", type="video", maxResults=max_results).execute()
+                for it in resp.get("items", []) or []:
+                    vid = (it.get("id", {}) or {}).get("videoId", "")
+                    sn = it.get("snippet", {}) or {}
+                    if not vid:
+                        continue
+                    videos.append(
+                        ChannelLatestVideo(
+                            video_id=vid,
+                            title=sn.get("title", ""),
+                            published_at=sn.get("publishedAt", ""),
+                        )
                     )
-                )
         except Exception:
             self.logger.exception("Failed to fetch recent videos for channel: %s", channel_id)
         return videos
