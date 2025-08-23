@@ -14,6 +14,7 @@ from .config import AppConfig
 from .pipeline import generate_video_pipeline
 from .youtube_uploader import YouTubeUploader, UploadMetadata
 from .utils import sanitize_title
+from .youtube_monitor import check_for_new_video_and_get_transcript
 
 
 console = Console()
@@ -122,7 +123,6 @@ def _default(
         except Exception as e:
             console.print(f"[red]YouTube upload failed: {e}")
 
-
 # Removed `init` command as we no longer write a default config file
 
 
@@ -189,6 +189,59 @@ def run_once(
             if thumbnail_path:
                 uploader.set_thumbnail(video_id=video_id, thumbnail_path=Path(thumbnail_path))
             console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
+        except Exception as e:
+            console.print(f"[red]YouTube upload failed: {e}")
+
+
+@app.command()
+def generate_from_channel_if_new(
+    channel_handle: str = typer.Option("@SwaruuOficial", help="YouTube channel handle (e.g., @SwaruuOficial) or channel ID (UC...)"),
+    credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
+    state_dir: str = typer.Option(".state", help="Directory to persist last processed video IDs"),
+    output_dir: str = typer.Option("outputs", help="Directory for outputs"),
+    upload: bool = typer.Option(True, help="Upload the generated video to YouTube when created"),
+) -> None:
+    """Check channel for a new video; if found, use its transcript as PROMPT and generate/upload."""
+    ensure_env_loaded()
+    validate_required_env()
+
+    os.environ.setdefault("YOUTUBE_CREDENTIALS_DIR", credentials_dir)
+
+    state_path = Path(state_dir)
+    credentials_path = Path(credentials_dir)
+
+    res = check_for_new_video_and_get_transcript(
+        channel_handle_or_id=channel_handle,
+        credentials_dir=credentials_path,
+        state_dir=state_path,
+        preferred_languages=["es", "en", "pl"],
+    )
+    if not res:
+        console.print("[yellow]No new video detected or no transcript available; nothing to do.")
+        raise typer.Exit(code=0)
+
+    video_id, transcript = res
+    # Use transcript as PROMPT
+    os.environ["PROMPT"] = transcript
+
+    config = AppConfig()
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    result = generate_video_pipeline(config=config, output_dir=Path(output_dir))
+    console.print(f"[green]Generated video from transcript of {channel_handle} latest ({video_id}): {result.video_path}")
+
+    if upload:
+        try:
+            resolved_title = result.topic
+            uploader = YouTubeUploader(credentials_dir=credentials_path)
+            metadata = UploadMetadata(
+                title=resolved_title,
+                description="",
+                tags=None,
+                category_id="22",
+                privacy_status="public",
+            )
+            new_video_id = uploader.upload_video(video_path=Path(result.video_path), metadata=metadata)
+            console.print(f"[green]Uploaded to YouTube. Video ID: {new_video_id}")
         except Exception as e:
             console.print(f"[red]YouTube upload failed: {e}")
 
