@@ -130,6 +130,60 @@ def generate_images(
 
 
 
+async def generate_images_async(
+	*,
+	image_prompts: Optional[List[str]] = None,
+	num_images: int,
+	output_dir: Path,
+	image_model: str,
+	image_size: str,
+	image_quality: str,
+) -> List[Path]:
+	output_dir.mkdir(parents=True, exist_ok=True)
+	if image_prompts is None:
+		raise ValueError(
+			"image_prompts must be provided; automatic scene description generation was removed. "
+			"Use scriptgen.generate_topic_and_scenes to obtain prompts."
+		)
+	scene_prompts = image_prompts[:num_images]
+	while len(scene_prompts) < num_images:
+		scene_prompts.append(scene_prompts[-1])
+
+	# Basic run metadata
+	try:
+		preview = (scene_prompts[0] if scene_prompts else "")[:160].replace("\n", " ")
+		print(
+			f"[images] model={image_model} size={image_size} quality={image_quality} "
+			f"num_images={num_images} first_prompt_preview=\"{preview}\""
+		)
+	except Exception:
+		pass
+
+	# Save prompts for debugging
+	try:
+		prompts_file = output_dir / "scene_prompts.txt"
+		with open(prompts_file, "w", encoding="utf-8") as f:
+			for i, p in enumerate(scene_prompts):
+				f.write(f"[{i:03d}] {p}\n")
+	except Exception:
+		pass
+
+	# Always use async for OpenAI image generation with a conservative concurrency cap.
+	concurrency = min(12, max(1, len(scene_prompts)))
+
+	paths = await _generate_images_async_openai(
+		scene_prompts, output_dir, concurrency, model=image_model, size=image_size, quality=image_quality
+	)
+	# Print sizes for quick diagnostics
+	try:
+		for p in paths:
+			print(f"[images] file {p} -> {os.path.getsize(p)} bytes")
+	except Exception:
+		pass
+	return paths
+
+
+
 async def _generate_images_async_openai(
 	prompts: List[str],
 	output_dir: Path,
