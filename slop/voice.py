@@ -110,23 +110,8 @@ async def synthesize_voice_with_alignment_async(
     output_format: str,
     style: float,
 ) -> _Tuple[Path, CharacterAlignmentResponseModel]:
-    """Async variant using AsyncElevenLabs if available, otherwise runs sync in a thread."""
-    try:
-        from elevenlabs.client import AsyncElevenLabs  # type: ignore
-    except Exception:
-        AsyncElevenLabs = None  # type: ignore
-
-    if AsyncElevenLabs is None:
-        # Fall back to running the synchronous path in a background thread
-        return await asyncio.to_thread(
-            synthesize_voice_with_alignment,
-            text,
-            voice_id,
-            output_dir,
-            model_id=model_id,
-            output_format=output_format,
-            style=style,
-        )
+    """Async ElevenLabs TTS with alignment; requires AsyncElevenLabs."""
+    from elevenlabs.client import AsyncElevenLabs  # type: ignore
 
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / "voice.mp3"

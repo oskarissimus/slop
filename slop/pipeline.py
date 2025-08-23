@@ -78,28 +78,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         image_paths, (audio_path, alignment) = await asyncio.gather(images_task, tts_task)
         return image_paths, audio_path, alignment
 
-    try:
-        image_paths, audio_path, alignment = asyncio.run(run_parallel())
-    except RuntimeError as e:
-        # Fallback for environments where an event loop is already running
-        # (e.g., executed under an existing asyncio loop). In that case, run sequentially.
-        print(f"[pipeline] asyncio.run failed ({e}); falling back to sequential execution")
-        image_paths = generate_images(
-            image_prompts=image_prompts,
-            num_images=config.num_images,
-            output_dir=work_dir,
-            image_model=config.image_model,
-            image_size=f"{config.resolution_width}x{config.resolution_height}",
-            image_quality=config.image_quality,
-        )
-        audio_path, alignment = synthesize_voice_with_alignment(
-            text=script_text,
-            voice_id=config.voice_id,
-            output_dir=work_dir,
-            model_id=config.tts_model_id,
-            output_format=config.tts_output_format,
-            style=config.style,
-        )
+    image_paths, audio_path, alignment = asyncio.run(run_parallel())
 
     # 6) Stitch video, using alignment to time images if available
     video_path = stitch_video(
