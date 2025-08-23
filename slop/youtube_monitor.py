@@ -91,7 +91,7 @@ def check_for_new_video_and_get_transcript(
     channel_handle_or_id: str,
     credentials_dir: Path,
     preferred_languages: Optional[list[str]] = None,
-    freshness_hours: int = 24,
+    freshness_hours: int = 2400,
 ) -> Optional[tuple[str, str]]:
     """If the newest video is not older than freshness_hours, return (video_id, transcript). Otherwise None."""
     monitor = YouTubePublicMonitor(credentials_dir=credentials_dir)
