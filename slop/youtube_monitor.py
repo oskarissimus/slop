@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-import os
+from datetime import datetime, timezone, timedelta
 
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 
@@ -32,7 +32,6 @@ class YouTubePublicMonitor:
         handle = handle_or_id.strip()
         if handle.startswith("UC") and len(handle) >= 12:
             return handle
-        # Fallback: search the channel by query
         yt = self._service()
         try:
             resp = yt.search().list(part="snippet", q=handle, type="channel", maxResults=1).execute()
@@ -60,31 +59,6 @@ class YouTubePublicMonitor:
             return None
 
 
-def _state_file_for(channel_key: str, state_dir: Path) -> Path:
-    safe_key = "".join(c for c in channel_key if c.isalnum() or c in ("-", "_")).strip("-")
-    return state_dir / f"last_{safe_key}_video_id.txt"
-
-
-def load_last_processed_video_id(channel_key: str, state_dir: Path) -> Optional[str]:
-    state_dir.mkdir(parents=True, exist_ok=True)
-    f = _state_file_for(channel_key, state_dir)
-    if not f.exists():
-        return None
-    try:
-        return f.read_text(encoding="utf-8").strip() or None
-    except Exception:
-        return None
-
-
-def save_last_processed_video_id(channel_key: str, video_id: str, state_dir: Path) -> None:
-    state_dir.mkdir(parents=True, exist_ok=True)
-    f = _state_file_for(channel_key, state_dir)
-    try:
-        f.write_text(video_id, encoding="utf-8")
-    except Exception:
-        pass
-
-
 def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000) -> Optional[str]:
     langs = preferred_languages or ["es", "en", "pl"]
     try:
@@ -99,33 +73,46 @@ def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]
         return None
     if len(text) > max_chars:
         text = text[:max_chars].rsplit(" ", 1)[0] + "…"
-        
     return text
+
+
+def parse_published_at_iso8601(ts: str) -> Optional[datetime]:
+    if not ts:
+        return None
+    try:
+        # YouTube returns e.g. 2024-08-23T12:34:56Z
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except Exception:
+        return None
 
 
 def check_for_new_video_and_get_transcript(
     *,
     channel_handle_or_id: str,
     credentials_dir: Path,
-    state_dir: Path,
     preferred_languages: Optional[list[str]] = None,
+    freshness_hours: int = 24,
 ) -> Optional[tuple[str, str]]:
-    """If there's a new video on the channel, return (video_id, transcript). Otherwise None."""
+    """If the newest video is not older than freshness_hours, return (video_id, transcript). Otherwise None."""
     monitor = YouTubePublicMonitor(credentials_dir=credentials_dir)
     channel_id = monitor.resolve_channel_id(channel_handle_or_id)
     if not channel_id:
         return None
+
     latest = monitor.fetch_latest_video(channel_id)
     if not latest or not latest.video_id:
         return None
 
-    last_id = load_last_processed_video_id(channel_key=channel_handle_or_id, state_dir=state_dir)
-    if last_id and last_id == latest.video_id:
+    published_dt = parse_published_at_iso8601(latest.published_at)
+    if not published_dt:
+        return None
+
+    now = datetime.now(timezone.utc)
+    if now - published_dt > timedelta(hours=freshness_hours):
         return None
 
     transcript = fetch_transcript_text(latest.video_id, preferred_languages=preferred_languages)
     if not transcript:
         return None
 
-    save_last_processed_video_id(channel_key=channel_handle_or_id, video_id=latest.video_id, state_dir=state_dir)
     return latest.video_id, transcript

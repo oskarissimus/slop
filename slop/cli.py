@@ -197,23 +197,20 @@ def run_once(
 def generate_from_channel_if_new(
     channel_handle: str = typer.Option("@SwaruuOficial", help="YouTube channel handle (e.g., @SwaruuOficial) or channel ID (UC...)"),
     credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
-    state_dir: str = typer.Option(".state", help="Directory to persist last processed video IDs"),
     output_dir: str = typer.Option("outputs", help="Directory for outputs"),
     upload: bool = typer.Option(True, help="Upload the generated video to YouTube when created"),
 ) -> None:
-    """Check channel for a new video; if found, use its transcript as PROMPT and generate/upload."""
+    """Check channel for a new video in the last 24h; if found, use its transcript as PROMPT and generate/upload."""
     ensure_env_loaded()
     validate_required_env()
 
     os.environ.setdefault("YOUTUBE_CREDENTIALS_DIR", credentials_dir)
 
-    state_path = Path(state_dir)
     credentials_path = Path(credentials_dir)
 
     res = check_for_new_video_and_get_transcript(
         channel_handle_or_id=channel_handle,
         credentials_dir=credentials_path,
-        state_dir=state_path,
         preferred_languages=["es", "en", "pl"],
     )
     if not res:
