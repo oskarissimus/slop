@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone, timedelta
+import logging
 
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 
@@ -20,6 +21,7 @@ class ChannelLatestVideo:
 class YouTubePublicMonitor:
     def __init__(self, credentials_dir: Path) -> None:
         self.credentials_dir = Path(credentials_dir)
+        self.logger = logging.getLogger(__name__ + ".YouTubePublicMonitor")
 
     def _service(self):
         uploader = YouTubeUploader(credentials_dir=self.credentials_dir)
@@ -31,15 +33,38 @@ class YouTubePublicMonitor:
         """
         handle = handle_or_id.strip()
         if handle.startswith("UC") and len(handle) >= 12:
+            self.logger.debug("Using provided channel ID: %s", handle)
             return handle
         yt = self._service()
         try:
-            resp = yt.search().list(part="snippet", q=handle, type="channel", maxResults=1).execute()
+            # Prefer resolving handles explicitly if provided (best-effort)
+            if handle.startswith("@"):
+                try:
+                    resp = yt.channels().list(part="id", forHandle=handle[1:]).execute()  # type: ignore[arg-type]
+                    items = resp.get("items", [])
+                    if items:
+                        cid = items[0].get("id")
+                        if cid:
+                            self.logger.debug("Resolved handle %s to channel ID via channels.list: %s", handle, cid)
+                            return cid
+                except Exception:
+                    # Fall back to search if forHandle is not supported or fails
+                    pass
+
+            resp = yt.search().list(part="id,snippet", q=handle, type="channel", maxResults=1).execute()
             items = resp.get("items", [])
             if not items:
+                self.logger.info("No channel found for query: %s", handle)
                 return None
-            return items[0]["snippet"]["channelId"]
+            # Prefer id.channelId; snippet.channelId as fallback
+            cid = items[0].get("id", {}).get("channelId") or items[0].get("snippet", {}).get("channelId")
+            if cid:
+                self.logger.debug("Resolved %s to channel ID via search: %s", handle, cid)
+                return cid
+            self.logger.info("Search result missing channelId fields for: %s", handle)
+            return None
         except Exception:
+            self.logger.exception("Failed to resolve channel ID for: %s", handle)
             return None
 
     def fetch_latest_video(self, channel_id: str) -> Optional[ChannelLatestVideo]:
@@ -57,6 +82,27 @@ class YouTubePublicMonitor:
             return ChannelLatestVideo(video_id=vid, title=title, published_at=published_at)
         except Exception:
             return None
+
+    def fetch_recent_videos(self, channel_id: str, max_results: int = 5) -> list[ChannelLatestVideo]:
+        yt = self._service()
+        videos: list[ChannelLatestVideo] = []
+        try:
+            resp = yt.search().list(part="snippet", channelId=channel_id, order="date", type="video", maxResults=max_results).execute()
+            for it in resp.get("items", []) or []:
+                vid = (it.get("id", {}) or {}).get("videoId", "")
+                sn = it.get("snippet", {}) or {}
+                if not vid:
+                    continue
+                videos.append(
+                    ChannelLatestVideo(
+                        video_id=vid,
+                        title=sn.get("title", ""),
+                        published_at=sn.get("publishedAt", ""),
+                    )
+                )
+        except Exception:
+            self.logger.exception("Failed to fetch recent videos for channel: %s", channel_id)
+        return videos
 
 
 def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000) -> Optional[str]:
@@ -92,27 +138,34 @@ def check_for_new_video_and_get_transcript(
     credentials_dir: Path,
     preferred_languages: Optional[list[str]] = None,
     freshness_hours: int = 2400,
+    max_candidates: int = 5,
 ) -> Optional[tuple[str, str]]:
-    """If the newest video is not older than freshness_hours, return (video_id, transcript). Otherwise None."""
+    """If a recent video (within freshness_hours) has a transcript, return (video_id, transcript).
+    Checks up to max_candidates newest videos, instead of only the very latest.
+    """
     monitor = YouTubePublicMonitor(credentials_dir=credentials_dir)
     channel_id = monitor.resolve_channel_id(channel_handle_or_id)
     if not channel_id:
         return None
 
-    latest = monitor.fetch_latest_video(channel_id)
-    if not latest or not latest.video_id:
-        return None
-
-    published_dt = parse_published_at_iso8601(latest.published_at)
-    if not published_dt:
-        return None
+    # Iterate over recent uploads to avoid missing cases where the newest has no transcript
+    recent_videos = monitor.fetch_recent_videos(channel_id, max_results=max_candidates)
+    if not recent_videos:
+        # Fallback to single latest
+        latest = monitor.fetch_latest_video(channel_id)
+        recent_videos = [latest] if latest else []
 
     now = datetime.now(timezone.utc)
-    if now - published_dt > timedelta(hours=freshness_hours):
-        return None
+    for vid in recent_videos:
+        if not vid or not vid.video_id:
+            continue
+        published_dt = parse_published_at_iso8601(vid.published_at)
+        if not published_dt:
+            continue
+        if now - published_dt > timedelta(hours=freshness_hours):
+            continue
+        transcript = fetch_transcript_text(vid.video_id, preferred_languages=preferred_languages)
+        if transcript:
+            return vid.video_id, transcript
 
-    transcript = fetch_transcript_text(latest.video_id, preferred_languages=preferred_languages)
-    if not transcript:
-        return None
-
-    return latest.video_id, transcript
+    return None
