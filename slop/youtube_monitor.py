@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 import logging
+import os
 
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 
@@ -140,7 +141,27 @@ class YouTubePublicMonitor:
 
 
 def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000) -> Optional[str]:
-    langs = preferred_languages or ["es", "en", "pl"]
+    # Allow override via env var; otherwise use a broad default set
+    if preferred_languages is None:
+        env_langs = os.getenv("YOUTUBE_TRANSCRIPT_LANGS", "").strip()
+        if env_langs:
+            langs = [lang.strip() for lang in env_langs.split(",") if lang.strip()]
+        else:
+            langs = [
+                "en", "en-US", "en-GB",
+                "es", "es-419", "es-MX", "es-ES",
+                "pl",
+                "pt", "pt-BR", "pt-PT",
+                "fr", "de", "it",
+                "ru", "uk", "tr",
+                "ar", "fa", "ur",
+                "hi", "bn", "ta", "te", "ml",
+                "id", "ms", "fil", "vi", "th",
+                "ja", "ko",
+                "zh", "zh-Hans", "zh-Hant",
+            ]
+    else:
+        langs = preferred_languages
     try:
         segments = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
     except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):

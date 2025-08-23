@@ -215,7 +215,7 @@ def generate_from_channel_if_new(
     res = check_for_new_video_and_get_transcript(
         channel_handle_or_id=channel_handle,
         credentials_dir=credentials_path,
-        preferred_languages=["es", "en", "pl"],
+        preferred_languages=None,
     )
     if not res:
         console.print("[yellow]No new video detected or no transcript available; nothing to do.")
