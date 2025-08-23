@@ -140,7 +140,7 @@ class YouTubePublicMonitor:
         return videos
 
 
-def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000) -> Optional[str]:
+def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000, use_generated_fallback: bool = True) -> Optional[str]:
     # Allow override via env var; otherwise use a broad default set
     if preferred_languages is None:
         env_langs = os.getenv("YOUTUBE_TRANSCRIPT_LANGS", "").strip()
@@ -162,12 +162,39 @@ def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]
             ]
     else:
         langs = preferred_languages
+
+    segments = None
+    # Prefer explicit listing to choose manual vs generated
     try:
-        segments = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
+        transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
+        transcript_obj = None
+        # Try manually created first
+        try:
+            transcript_obj = transcripts.find_manually_created_transcript(langs)
+        except Exception:
+            transcript_obj = None
+        # Fallback to generated if allowed
+        if transcript_obj is None and use_generated_fallback:
+            try:
+                transcript_obj = transcripts.find_generated_transcript(langs)
+            except Exception:
+                transcript_obj = None
+        if transcript_obj is not None:
+            segments = transcript_obj.fetch()
     except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
-        return None
+        segments = None
     except Exception:
-        return None
+        segments = None
+
+    # As a last resort, try generic get_transcript (may succeed in some cases)
+    if segments is None:
+        try:
+            segments = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
+        except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
+            return None
+        except Exception:
+            return None
+
     text = " ".join((seg.get("text", "") or "").replace("\n", " ").strip() for seg in segments)
     text = " ".join(text.split())
     if not text:
@@ -194,6 +221,7 @@ def check_for_new_video_and_get_transcript(
     preferred_languages: Optional[list[str]] = None,
     freshness_hours: int = 2400,
     max_candidates: int = 5,
+    use_generated_fallback: bool = True,
 ) -> Optional[tuple[str, str]]:
     """If a recent video (within freshness_hours) has a transcript, return (video_id, transcript).
     Checks up to max_candidates newest videos, instead of only the very latest.
@@ -219,7 +247,7 @@ def check_for_new_video_and_get_transcript(
             continue
         if now - published_dt > timedelta(hours=freshness_hours):
             continue
-        transcript = fetch_transcript_text(vid.video_id, preferred_languages=preferred_languages)
+        transcript = fetch_transcript_text(vid.video_id, preferred_languages=preferred_languages, use_generated_fallback=use_generated_fallback)
         if transcript:
             return vid.video_id, transcript
 
