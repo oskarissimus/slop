@@ -11,6 +11,11 @@ from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, No
 
 from .youtube_uploader import YouTubeUploader
 
+try:
+    import yt_dlp  # type: ignore
+except Exception:  # pragma: no cover
+    yt_dlp = None  # type: ignore
+
 
 @dataclass
 class ChannelLatestVideo:
@@ -140,6 +145,74 @@ class YouTubePublicMonitor:
         return videos
 
 
+def _fetch_captions_with_ytdlp(video_id: str, preferred_languages: list[str]) -> Optional[list[dict]]:
+    if yt_dlp is None:
+        return None
+    # Try to extract subtitles using yt-dlp
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    cookies_file = os.getenv("YTDLP_COOKIES_FILE", "").strip() or None
+    cookies_from_browser = os.getenv("YTDLP_COOKIES_FROM_BROWSER", "").strip() or None
+    ydl_opts: dict = {
+        "skip_download": True,
+        "writesubtitles": True,
+        "writeautomaticsub": True,
+        "subtitlesformat": "vtt",
+        "quiet": True,
+        "no_warnings": True,
+        "forcejson": True,
+        "extract_flat": False,
+        "simulate": True,
+    }
+    if cookies_file:
+        ydl_opts["cookies"] = cookies_file
+    elif cookies_from_browser:
+        ydl_opts["cookiesfrombrowser"] = cookies_from_browser
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
+            info = ydl.extract_info(url, download=False)
+        # Prefer automatic captions in preferred languages
+        auto = (info.get("automatic_captions") or {}) if isinstance(info, dict) else {}
+        subs = (info.get("subtitles") or {}) if isinstance(info, dict) else {}
+        # Build ordered list of language preferences
+        lang_order = preferred_languages + [l.split("-")[0] for l in preferred_languages]
+        seen = set()
+        lang_order = [l for l in lang_order if not (l in seen or seen.add(l))]
+        tracks = None
+        for lang in lang_order:
+            if lang in auto and auto[lang]:
+                tracks = auto[lang]
+                break
+        if tracks is None:
+            for lang in lang_order:
+                if lang in subs and subs[lang]:
+                    tracks = subs[lang]
+                    break
+        if not tracks:
+            return None
+        # Download the first track URL and parse VTT to segments
+        import io, re, requests
+        vtt_url = tracks[0].get("url")
+        if not vtt_url:
+            return None
+        resp = requests.get(vtt_url, timeout=20)
+        resp.raise_for_status()
+        content = resp.text
+        # Simple VTT cue parsing
+        segments: list[dict] = []
+        buf = io.StringIO(content)
+        for line in buf:
+            if "-->" in line:
+                # Next line should be text
+                text = buf.readline().strip()
+                if text and not text.startswith("WEBVTT"):
+                    # Normalize whitespace
+                    text = re.sub(r"\s+", " ", text)
+                    segments.append({"text": text})
+        return segments
+    except Exception:
+        return None
+
+
 def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000, use_generated_fallback: bool = True) -> Optional[str]:
     # Allow override via env var; otherwise use a broad default set
     if preferred_languages is None:
@@ -191,8 +264,14 @@ def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]
         try:
             segments = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
         except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
-            return None
+            segments = None
         except Exception:
+            segments = None
+
+    # Try yt-dlp fallback if still no segments
+    if segments is None and os.getenv("SLOP_ENABLE_YTDLP_FALLBACK", "1").strip() not in ("0", "false", "False"):
+        segments = _fetch_captions_with_ytdlp(video_id, langs) or None
+        if segments is None:
             return None
 
     text = " ".join((seg.get("text", "") or "").replace("\n", " ").strip() for seg in segments)
