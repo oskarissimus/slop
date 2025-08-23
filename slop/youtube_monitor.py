@@ -5,10 +5,16 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone, timedelta
 import logging
+import os
 
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 
 from .youtube_uploader import YouTubeUploader
+
+try:
+    import yt_dlp  # type: ignore
+except Exception:  # pragma: no cover
+    yt_dlp = None  # type: ignore
 
 
 @dataclass
@@ -87,32 +93,187 @@ class YouTubePublicMonitor:
         yt = self._service()
         videos: list[ChannelLatestVideo] = []
         try:
-            resp = yt.search().list(part="snippet", channelId=channel_id, order="date", type="video", maxResults=max_results).execute()
-            for it in resp.get("items", []) or []:
-                vid = (it.get("id", {}) or {}).get("videoId", "")
-                sn = it.get("snippet", {}) or {}
-                if not vid:
-                    continue
-                videos.append(
-                    ChannelLatestVideo(
-                        video_id=vid,
-                        title=sn.get("title", ""),
-                        published_at=sn.get("publishedAt", ""),
+            # Resolve uploads playlist for the channel; this is more reliable than search
+            ch_resp = yt.channels().list(part="contentDetails", id=channel_id).execute()
+            uploads_playlist_id = None
+            items = ch_resp.get("items", [])
+            if items:
+                uploads_playlist_id = (items[0].get("contentDetails", {}) or {}).get("relatedPlaylists", {}).get("uploads")
+            if uploads_playlist_id:
+                next_page_token = None
+                while len(videos) < max_results:
+                    pl_resp = yt.playlistItems().list(
+                        part="snippet,contentDetails",
+                        playlistId=uploads_playlist_id,
+                        maxResults=min(50, max_results - len(videos)),
+                        pageToken=next_page_token,
+                    ).execute()
+                    for it in pl_resp.get("items", []) or []:
+                        vid = (it.get("contentDetails", {}) or {}).get("videoId", "")
+                        sn = it.get("snippet", {}) or {}
+                        if not vid:
+                            continue
+                        videos.append(
+                            ChannelLatestVideo(
+                                video_id=vid,
+                                title=sn.get("title", ""),
+                                published_at=sn.get("publishedAt", ""),
+                            )
+                        )
+                        if len(videos) >= max_results:
+                            break
+                    next_page_token = pl_resp.get("nextPageToken")
+                    if not next_page_token:
+                        break
+            # Fallback to search if uploads playlist not found or empty
+            if not videos:
+                resp = yt.search().list(part="snippet", channelId=channel_id, order="date", type="video", maxResults=max_results).execute()
+                for it in resp.get("items", []) or []:
+                    vid = (it.get("id", {}) or {}).get("videoId", "")
+                    sn = it.get("snippet", {}) or {}
+                    if not vid:
+                        continue
+                    videos.append(
+                        ChannelLatestVideo(
+                            video_id=vid,
+                            title=sn.get("title", ""),
+                            published_at=sn.get("publishedAt", ""),
+                        )
                     )
-                )
         except Exception:
             self.logger.exception("Failed to fetch recent videos for channel: %s", channel_id)
         return videos
 
 
-def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000) -> Optional[str]:
-    langs = preferred_languages or ["es", "en", "pl"]
-    try:
-        segments = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
-    except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
+def _fetch_captions_with_ytdlp(video_id: str, preferred_languages: list[str]) -> Optional[list[dict]]:
+    if yt_dlp is None:
         return None
+    # Try to extract subtitles using yt-dlp
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    cookies_file = os.getenv("YTDLP_COOKIES_FILE", "").strip() or None
+    cookies_from_browser = os.getenv("YTDLP_COOKIES_FROM_BROWSER", "").strip() or None
+    ydl_opts: dict = {
+        "skip_download": True,
+        "writesubtitles": True,
+        "writeautomaticsub": True,
+        "subtitlesformat": "vtt",
+        "quiet": True,
+        "no_warnings": True,
+        "forcejson": True,
+        "extract_flat": False,
+        "simulate": True,
+    }
+    if cookies_file:
+        ydl_opts["cookies"] = cookies_file
+    elif cookies_from_browser:
+        ydl_opts["cookiesfrombrowser"] = cookies_from_browser
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
+            info = ydl.extract_info(url, download=False)
+        # Prefer automatic captions in preferred languages
+        auto = (info.get("automatic_captions") or {}) if isinstance(info, dict) else {}
+        subs = (info.get("subtitles") or {}) if isinstance(info, dict) else {}
+        # Build ordered list of language preferences
+        lang_order = preferred_languages + [l.split("-")[0] for l in preferred_languages]
+        seen = set()
+        lang_order = [l for l in lang_order if not (l in seen or seen.add(l))]
+        tracks = None
+        for lang in lang_order:
+            if lang in auto and auto[lang]:
+                tracks = auto[lang]
+                break
+        if tracks is None:
+            for lang in lang_order:
+                if lang in subs and subs[lang]:
+                    tracks = subs[lang]
+                    break
+        if not tracks:
+            return None
+        # Download the first track URL and parse VTT to segments
+        import io, re, requests
+        vtt_url = tracks[0].get("url")
+        if not vtt_url:
+            return None
+        resp = requests.get(vtt_url, timeout=20)
+        resp.raise_for_status()
+        content = resp.text
+        # Simple VTT cue parsing
+        segments: list[dict] = []
+        buf = io.StringIO(content)
+        for line in buf:
+            if "-->" in line:
+                # Next line should be text
+                text = buf.readline().strip()
+                if text and not text.startswith("WEBVTT"):
+                    # Normalize whitespace
+                    text = re.sub(r"\s+", " ", text)
+                    segments.append({"text": text})
+        return segments
     except Exception:
         return None
+
+
+def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000, use_generated_fallback: bool = True) -> Optional[str]:
+    # Allow override via env var; otherwise use a broad default set
+    if preferred_languages is None:
+        env_langs = os.getenv("YOUTUBE_TRANSCRIPT_LANGS", "").strip()
+        if env_langs:
+            langs = [lang.strip() for lang in env_langs.split(",") if lang.strip()]
+        else:
+            langs = [
+                "en", "en-US", "en-GB",
+                "es", "es-419", "es-MX", "es-ES",
+                "pl",
+                "pt", "pt-BR", "pt-PT",
+                "fr", "de", "it",
+                "ru", "uk", "tr",
+                "ar", "fa", "ur",
+                "hi", "bn", "ta", "te", "ml",
+                "id", "ms", "fil", "vi", "th",
+                "ja", "ko",
+                "zh", "zh-Hans", "zh-Hant",
+            ]
+    else:
+        langs = preferred_languages
+
+    segments = None
+    # Prefer explicit listing to choose manual vs generated
+    try:
+        transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
+        transcript_obj = None
+        # Try manually created first
+        try:
+            transcript_obj = transcripts.find_manually_created_transcript(langs)
+        except Exception:
+            transcript_obj = None
+        # Fallback to generated if allowed
+        if transcript_obj is None and use_generated_fallback:
+            try:
+                transcript_obj = transcripts.find_generated_transcript(langs)
+            except Exception:
+                transcript_obj = None
+        if transcript_obj is not None:
+            segments = transcript_obj.fetch()
+    except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
+        segments = None
+    except Exception:
+        segments = None
+
+    # As a last resort, try generic get_transcript (may succeed in some cases)
+    if segments is None:
+        try:
+            segments = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
+        except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
+            segments = None
+        except Exception:
+            segments = None
+
+    # Try yt-dlp fallback if still no segments
+    if segments is None and os.getenv("SLOP_ENABLE_YTDLP_FALLBACK", "1").strip() not in ("0", "false", "False"):
+        segments = _fetch_captions_with_ytdlp(video_id, langs) or None
+        if segments is None:
+            return None
+
     text = " ".join((seg.get("text", "") or "").replace("\n", " ").strip() for seg in segments)
     text = " ".join(text.split())
     if not text:
@@ -139,6 +300,7 @@ def check_for_new_video_and_get_transcript(
     preferred_languages: Optional[list[str]] = None,
     freshness_hours: int = 2400,
     max_candidates: int = 5,
+    use_generated_fallback: bool = True,
 ) -> Optional[tuple[str, str]]:
     """If a recent video (within freshness_hours) has a transcript, return (video_id, transcript).
     Checks up to max_candidates newest videos, instead of only the very latest.
@@ -164,7 +326,7 @@ def check_for_new_video_and_get_transcript(
             continue
         if now - published_dt > timedelta(hours=freshness_hours):
             continue
-        transcript = fetch_transcript_text(vid.video_id, preferred_languages=preferred_languages)
+        transcript = fetch_transcript_text(vid.video_id, preferred_languages=preferred_languages, use_generated_fallback=use_generated_fallback)
         if transcript:
             return vid.video_id, transcript
 
