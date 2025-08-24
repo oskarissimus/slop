@@ -1,15 +1,10 @@
 name: slop-daily
 
 on:
-  schedule:
-    - cron: "0 9 * * *" # 09:00 UTC daily
   workflow_dispatch:
     inputs:
       prompt:
         description: "Opis tematu (opcjonalny). Jeśli podany, zasili zmienną PROMPT."
-        required: false
-      mode:
-        description: "Tryb uruchomienia: production | test (opcjonalny, domyślnie production)"
         required: false
 
 concurrency:
