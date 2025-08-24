@@ -6,8 +6,19 @@ from typing import Optional
 from datetime import datetime, timezone, timedelta
 import logging
 import os
+import requests
 
-from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
+try:
+    from youtube_transcript_api import (
+        YouTubeTranscriptApi,
+        TranscriptsDisabled,
+        NoTranscriptFound,
+        VideoUnavailable,
+    )
+    _YT_EXC_TUPLE = (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable)
+except Exception:  # pragma: no cover - make optional for environments without the package
+    YouTubeTranscriptApi = None  # type: ignore[assignment]
+    _YT_EXC_TUPLE = (Exception,)
 
 from .youtube_uploader import YouTubeUploader
 
@@ -213,6 +224,59 @@ def _fetch_captions_with_ytdlp(video_id: str, preferred_languages: list[str]) ->
         return None
 
 
+def _fetch_transcript_via_rapidapi(video_id: str, lang: str) -> Optional[str]:
+    """Fetch transcript text via RapidAPI youtube-transcriptor.
+    Returns a normalized single string or None on failure.
+    """
+    api_key = os.getenv("RAPIDAPI_KEY") or os.getenv("RAPIDAPI_YOUTUBE_TRANSCRIPT_KEY")
+    if not api_key:
+        return None
+    url = "https://youtube-transcriptor.p.rapidapi.com/transcript"
+    headers = {
+        "x-rapidapi-key": api_key,
+        "x-rapidapi-host": "youtube-transcriptor.p.rapidapi.com",
+    }
+    try:
+        resp = requests.get(url, headers=headers, params={"video_id": video_id, "lang": lang}, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, dict):
+            transcript_str = data.get("transcript")
+            if isinstance(transcript_str, str) and transcript_str.strip():
+                return " ".join(transcript_str.split())
+            segments = None
+            for key in ("data", "segments", "result"):
+                val = data.get(key)
+                if isinstance(val, list):
+                    segments = val
+                    break
+            if isinstance(segments, list):
+                texts: list[str] = []
+                for seg in segments:
+                    if isinstance(seg, dict):
+                        t = seg.get("text") or seg.get("caption") or seg.get("transcript")
+                        if isinstance(t, str) and t.strip():
+                            texts.append(" ".join(t.split()))
+                    elif isinstance(seg, str) and seg.strip():
+                        texts.append(" ".join(seg.split()))
+                if texts:
+                    return " ".join(texts)
+        elif isinstance(data, list):
+            texts: list[str] = []
+            for seg in data:
+                if isinstance(seg, dict):
+                    t = seg.get("text") or seg.get("caption") or seg.get("transcript")
+                    if isinstance(t, str) and t.strip():
+                        texts.append(" ".join(t.split()))
+                elif isinstance(seg, str) and seg.strip():
+                    texts.append(" ".join(seg.split()))
+            if texts:
+                return " ".join(texts)
+    except Exception:
+        return None
+    return None
+
+
 def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000, use_generated_fallback: bool = True) -> Optional[str]:
     # Allow override via env var; otherwise use a broad default set
     if preferred_languages is None:
@@ -236,34 +300,44 @@ def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]
     else:
         langs = preferred_languages
 
+    # Try RapidAPI first with the most preferred languages, in order
+    for lang in langs:
+        via_rapidapi = _fetch_transcript_via_rapidapi(video_id, lang)
+        if via_rapidapi:
+            text = via_rapidapi
+            if len(text) > max_chars:
+                text = text[:max_chars].rsplit(" ", 1)[0] + "…"
+            return text
+
     segments = None
     # Prefer explicit listing to choose manual vs generated
-    try:
-        transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
-        transcript_obj = None
-        # Try manually created first
+    if YouTubeTranscriptApi is not None:
         try:
-            transcript_obj = transcripts.find_manually_created_transcript(langs)
-        except Exception:
+            transcripts = YouTubeTranscriptApi.list_transcripts(video_id)
             transcript_obj = None
-        # Fallback to generated if allowed
-        if transcript_obj is None and use_generated_fallback:
+            # Try manually created first
             try:
-                transcript_obj = transcripts.find_generated_transcript(langs)
+                transcript_obj = transcripts.find_manually_created_transcript(langs)
             except Exception:
                 transcript_obj = None
-        if transcript_obj is not None:
-            segments = transcript_obj.fetch()
-    except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
-        segments = None
-    except Exception:
-        segments = None
+            # Fallback to generated if allowed
+            if transcript_obj is None and use_generated_fallback:
+                try:
+                    transcript_obj = transcripts.find_generated_transcript(langs)
+                except Exception:
+                    transcript_obj = None
+            if transcript_obj is not None:
+                segments = transcript_obj.fetch()
+        except _YT_EXC_TUPLE:
+            segments = None
+        except Exception:
+            segments = None
 
     # As a last resort, try generic get_transcript (may succeed in some cases)
-    if segments is None:
+    if segments is None and YouTubeTranscriptApi is not None:
         try:
             segments = YouTubeTranscriptApi.get_transcript(video_id, languages=langs)
-        except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
+        except _YT_EXC_TUPLE:
             segments = None
         except Exception:
             segments = None

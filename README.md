@@ -14,6 +14,7 @@ CLI
 Environment
 - `OPENAI_API_KEY` for LLM image prompts and scripts
 - `ELEVENLABS_API_KEY` for TTS
+- `RAPIDAPI_KEY` for YouTube transcript retrieval (RapidAPI: youtube-transcriptor)
 - Optional overrides:
   - `OPENAI_CHAT_MODEL`, `OPENAI_SCENE_MODEL`
   - `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_SIZE`, `OPENAI_IMAGE_QUALITY`
