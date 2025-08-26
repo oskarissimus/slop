@@ -12,12 +12,14 @@ class AppConfig(BaseModel):
     resolution_width: int = 1024
     resolution_height: int = 1536
     num_images: int = 12
-    voice_id: str = "pNInz6obpgDQGcFmaJgB"
-    style: Optional[float] = None
+    voice_id: str = "Bx2lBwIZJBilRBVc3AGO"
+    style: Optional[float] = 60%
+           speed = 0.94
     #d4Z5Fvjohw3zxGpV8XUV - Maria float = 0.34
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
     #pNInz6obpgDQGcFmaJgB - sarmata
+    #Bx2lBwIZJBilRBVc3AGO - kamień stulecia
 
     # Runtime/model knobs (production defaults)
     chat_model: str = "gpt-4o-mini"
