@@ -13,7 +13,7 @@ class AppConfig(BaseModel):
     resolution_height: int = 1536
     num_images: int = 12
     voice_id: str = "Bx2lBwIZJBilRBVc3AGO"
-    style: Optional[float] = 60%
+    style: float = 60%
            speed = 0.94
     #d4Z5Fvjohw3zxGpV8XUV - Maria float = 0.34
     #olRVHO9SSe7gI7wwlL9o - rachel
