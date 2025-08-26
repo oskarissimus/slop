@@ -112,7 +112,7 @@ async def synthesize_voice_with_alignment_async(
     *,
     model_id: str,
     output_format: str,
-    style: Optional[float],
+    style: Optional[float], Optional[speed],
 ) -> _Tuple[Path, CharacterAlignmentResponseModel]:
     """Async ElevenLabs TTS with alignment; requires AsyncElevenLabs."""
     from elevenlabs.client import AsyncElevenLabs  # type: ignore
