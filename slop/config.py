@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import os
-from typing import Literal
+from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class AppConfig(BaseModel):
@@ -13,7 +13,7 @@ class AppConfig(BaseModel):
     resolution_height: int = 1536
     num_images: int = 12
     voice_id: str = "pNInz6obpgDQGcFmaJgB"
-    style: 
+    style: Optional[float] = None
     #d4Z5Fvjohw3zxGpV8XUV - Maria float = 0.34
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
@@ -26,6 +26,24 @@ class AppConfig(BaseModel):
     image_quality: Literal["low", "medium", "high"] = "medium"
     tts_model_id: str = "eleven_v3"
     tts_output_format: str = "mp3_44100_128"
+
+    @field_validator("style", mode="before")
+    @classmethod
+    def normalize_style(cls, value):
+        # Accept float/int, numeric strings, or special strings like "none" to omit
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"", "none", "null", "nil"}:
+                return None
+            try:
+                return float(value)
+            except ValueError as e:
+                raise ValueError("style must be a float or 'none'") from e
+        raise ValueError("style must be a float, numeric string, or 'none'")
 
 # Note: file-based config loading has been removed intentionally.
 

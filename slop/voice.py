@@ -41,7 +41,7 @@ def _extract_audio_base64(response: Any) -> Optional[str]:
 
 
 
-def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, *, model_id: str, output_format: str, style: float) -> Tuple[Path, CharacterAlignmentResponseModel]:
+def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, *, model_id: str, output_format: str, style: Optional[float]) -> Tuple[Path, CharacterAlignmentResponseModel]:
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / "voice.mp3"
 
@@ -57,13 +57,17 @@ def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, 
     )
 
     # Generate audio with character-level alignment per ElevenLabs docs
-    response = client.text_to_speech.convert_with_timestamps(
-        voice_id=voice_id,
-        text=text,
-        model_id=model_id,
-        output_format=output_format,
-        voice_settings=VoiceSettings(style=style)
-    )
+    # Build kwargs conditionally to omit voice_settings when style is None
+    tts_kwargs: Dict[str, Any] = {
+        "voice_id": voice_id,
+        "text": text,
+        "model_id": model_id,
+        "output_format": output_format,
+    }
+    if style is not None:
+        tts_kwargs["voice_settings"] = VoiceSettings(style=style)
+
+    response = client.text_to_speech.convert_with_timestamps(**tts_kwargs)
     # Debug: log which attributes exist on the response
     try:
         keys_or_attrs = list(response.keys()) if isinstance(response, dict) else dir(response)
@@ -108,7 +112,7 @@ async def synthesize_voice_with_alignment_async(
     *,
     model_id: str,
     output_format: str,
-    style: float,
+    style: Optional[float],
 ) -> _Tuple[Path, CharacterAlignmentResponseModel]:
     """Async ElevenLabs TTS with alignment; requires AsyncElevenLabs."""
     from elevenlabs.client import AsyncElevenLabs  # type: ignore
@@ -127,13 +131,17 @@ async def synthesize_voice_with_alignment_async(
         len(text or ""),
     )
 
-    response = await client.text_to_speech.convert_with_timestamps(  # type: ignore[attr-defined]
-        voice_id=voice_id,
-        text=text,
-        model_id=model_id,
-        output_format=output_format,
-        voice_settings=VoiceSettings(style=style),
-    )
+    # Build kwargs conditionally to omit voice_settings when style is None
+    tts_kwargs: Dict[str, Any] = {
+        "voice_id": voice_id,
+        "text": text,
+        "model_id": model_id,
+        "output_format": output_format,
+    }
+    if style is not None:
+        tts_kwargs["voice_settings"] = VoiceSettings(style=style)
+
+    response = await client.text_to_speech.convert_with_timestamps(**tts_kwargs)  # type: ignore[attr-defined]
 
     try:
         keys_or_attrs = list(response.keys()) if isinstance(response, dict) else dir(response)
