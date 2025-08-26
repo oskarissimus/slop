@@ -12,8 +12,8 @@ class AppConfig(BaseModel):
     resolution_width: int = 1024
     resolution_height: int = 1536
     num_images: int = 12
-    voice_id: str = "d4Z5Fvjohw3zxGpV8XUV"
-    style: float = 0.34
+    voice_id: str = "pNInz6obpgDQGcFmaJgB"
+    # style: float = 0.34
     #d4Z5Fvjohw3zxGpV8XUV - Maria
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
