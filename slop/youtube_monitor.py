@@ -145,50 +145,115 @@ def _extract_iso_published_at(item: dict) -> Optional[str]:
     return None
 
 
-def _fetch_transcript_via_rapidapi(video_id: str, lang: Optional[str] = None) -> Optional[str]:
-    """Fetch transcript text via RapidAPI yt-api subtitle endpoint."""
+def _fetch_transcript_via_rapidapi(video_id: str, preferred_languages: Optional[list[str]] = None) -> Optional[str]:
+    """Fetch transcript text via RapidAPI yt-api subtitles endpoint by selecting a preferred track and downloading it."""
     api_key = os.getenv("RAPIDAPI_KEY")
     if not api_key:
         return None
-    url = "https://yt-api.p.rapidapi.com/subtitle"
     headers = {
         "x-rapidapi-key": api_key,
         "x-rapidapi-host": "yt-api.p.rapidapi.com",
     }
+    # 1) Query available subtitle tracks
     try:
-        params = {"id": video_id}
-        if lang:
-            params["lang"] = lang
-        resp = requests.get(url, headers=headers, params=params, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        segments = None
-        if isinstance(data, dict):
-            for key in ("data", "segments", "captions", "result"):
-                val = data.get(key)
-                if isinstance(val, list):
-                    segments = val
-                    break
-            if segments is None:
-                t = data.get("transcript") or data.get("text")
-                if isinstance(t, str) and t.strip():
-                    return " ".join(t.split())
-        elif isinstance(data, list):
-            segments = data
-        if isinstance(segments, list):
-            texts: list[str] = []
-            for seg in segments:
-                if isinstance(seg, dict):
-                    t = seg.get("text") or seg.get("caption") or seg.get("transcript")
-                    if isinstance(t, str) and t.strip():
-                        texts.append(" ".join(t.split()))
-                elif isinstance(seg, str) and seg.strip():
-                    texts.append(" ".join(seg.split()))
-            if texts:
-                return " ".join(texts)
+        meta_resp = requests.get(
+            "https://yt-api.p.rapidapi.com/subtitles",
+            headers=headers,
+            params={"id": video_id},
+            timeout=30,
+        )
+        meta_resp.raise_for_status()
+        meta = meta_resp.json()
     except Exception:
         return None
-    return None
+
+    tracks = []
+    if isinstance(meta, dict):
+        tracks = meta.get("subtitles") or []
+    if not isinstance(tracks, list) or not tracks:
+        return None
+
+    # 2) Choose best track according to preferred_languages
+    prefs = preferred_languages or []
+    # Build preference list including base codes (e.g., en-US -> en)
+    expanded_prefs: list[str] = []
+    for code in prefs:
+        expanded_prefs.append(code)
+        if "-" in code:
+            expanded_prefs.append(code.split("-", 1)[0])
+    # Always consider English and the video's own primary language entries as fallbacks
+    if "en" not in expanded_prefs:
+        expanded_prefs.append("en")
+
+    def track_score(t: dict) -> int:
+        code = (t.get("languageCode") or "").lower()
+        # Highest priority for exact matches by order, then base code
+        for idx, pref in enumerate(expanded_prefs):
+            if code == pref.lower():
+                return 1000 - idx
+        base = code.split("-", 1)[0]
+        for idx, pref in enumerate(expanded_prefs):
+            if base == pref.lower():
+                return 500 - idx
+        # Prefer non-empty url
+        return 0 if t.get("url") else -100
+
+    tracks_sorted = sorted(tracks, key=track_score, reverse=True)
+    chosen = next((t for t in tracks_sorted if t.get("url")), None)
+    if not chosen:
+        return None
+
+    subtitle_url = chosen.get("url")
+    if not isinstance(subtitle_url, str) or not subtitle_url:
+        return None
+
+    # 3) Download and parse subtitle content (JSON or XML)
+    try:
+        sub_resp = requests.get(subtitle_url, timeout=30)
+        sub_resp.raise_for_status()
+        text: Optional[str] = None
+        # Try JSON first
+        try:
+            jd = sub_resp.json()
+            # JSON formats generally have events -> segs -> utf8
+            events = []
+            if isinstance(jd, dict):
+                events = jd.get("events") or jd.get("body") or []
+            if isinstance(events, list) and events:
+                pieces: list[str] = []
+                for ev in events:
+                    if not isinstance(ev, dict):
+                        continue
+                    segs = ev.get("segs") or []
+                    if isinstance(segs, list):
+                        for sg in segs:
+                            if isinstance(sg, dict):
+                                s = sg.get("utf8")
+                                if isinstance(s, str) and s.strip():
+                                    pieces.append(s.strip())
+                if pieces:
+                    text = " ".join(" ".join(pieces).split())
+        except Exception:
+            text = None
+
+        if text is None:
+            # Fallback: XML timedtext
+            import xml.etree.ElementTree as ET
+            import html as _html
+            try:
+                root = ET.fromstring(sub_resp.text)
+                pieces: list[str] = []
+                for node in root.findall('.//text'):
+                    t = node.text or ""
+                    if t:
+                        pieces.append(_html.unescape(t).strip())
+                if pieces:
+                    text = " ".join(" ".join(pieces).split())
+            except Exception:
+                text = None
+        return text
+    except Exception:
+        return None
 
 
 def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000, use_generated_fallback: bool = True) -> Optional[str]:
