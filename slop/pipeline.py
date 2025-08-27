@@ -73,7 +73,11 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
             output_dir=work_dir,
             model_id=config.tts_model_id,
             output_format=config.tts_output_format,
+            stability=config.stability,
+            similarity_boost=config.similarity_boost,
             style=config.style,
+            use_speaker_boost=config.use_speaker_boost,
+            speed=config.speed,
         )
         image_paths, (audio_path, alignment) = await asyncio.gather(images_task, tts_task)
         return image_paths, audio_path, alignment
