@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import os
 from typing import Literal, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 
 class AppConfig(BaseModel):
@@ -33,89 +32,7 @@ class AppConfig(BaseModel):
     tts_model_id: str = "eleven_v3"
     tts_output_format: str = "mp3_44100_128"
 
-    @field_validator("style", mode="before")
-    @classmethod
-    def normalize_style(cls, value):
-        # Accept float/int, numeric strings, or special strings like "none" to omit
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"", "none", "null", "nil"}:
-                return None
-            try:
-                return float(value)
-            except ValueError as e:
-                raise ValueError("style must be a float or 'none'") from e
-        raise ValueError("style must be a float, numeric string, or 'none'")
-
-    @field_validator("stability", mode="before")
-    @classmethod
-    def normalize_stability(cls, value):
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"", "none", "null", "nil"}:
-                return None
-            try:
-                return float(value)
-            except ValueError as e:
-                raise ValueError("stability must be a float or 'none'") from e
-        raise ValueError("stability must be a float, numeric string, or 'none'")
-
-    @field_validator("similarity_boost", mode="before")
-    @classmethod
-    def normalize_similarity_boost(cls, value):
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"", "none", "null", "nil"}:
-                return None
-            try:
-                return float(value)
-            except ValueError as e:
-                raise ValueError("similarity_boost must be a float or 'none'") from e
-        raise ValueError("similarity_boost must be a float, numeric string, or 'none'")
-
-    @field_validator("speed", mode="before")
-    @classmethod
-    def normalize_speed(cls, value):
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"", "none", "null", "nil"}:
-                return None
-            try:
-                return float(value)
-            except ValueError as e:
-                raise ValueError("speed must be a float or 'none'") from e
-        raise ValueError("speed must be a float, numeric string, or 'none'")
-
-    @field_validator("use_speaker_boost", mode="before")
-    @classmethod
-    def normalize_use_speaker_boost(cls, value):
-        if isinstance(value, bool) or value is None:
-            return value
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"", "none", "null", "nil"}:
-                return None
-            if lowered in {"true", "1", "yes", "y", "on"}:
-                return True
-            if lowered in {"false", "0", "no", "n", "off"}:
-                return False
-        raise ValueError("use_speaker_boost must be a boolean or 'none'")
+    
 
 # Note: file-based config loading has been removed intentionally.
 
