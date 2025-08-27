@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import os
 from typing import Literal, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel
 
 
 class AppConfig(BaseModel):
@@ -13,8 +12,12 @@ class AppConfig(BaseModel):
     resolution_height: int = 1536
     num_images: int = 12
     voice_id: str = "Bx2lBwIZJBilRBVc3AGO"
-    style: float = 0.60
-           speed = 0.94
+    # ElevenLabs voice settings (Optional so they can be omitted if None)
+    stability: Optional[float] = 0.50
+    similarity_boost: Optional[float] = 0.75
+    style: Optional[float] = 0.60
+    use_speaker_boost: Optional[bool] = True
+    speed: Optional[float] = 0.94
     #d4Z5Fvjohw3zxGpV8XUV - Maria float = 0.34
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
@@ -29,23 +32,7 @@ class AppConfig(BaseModel):
     tts_model_id: str = "eleven_v3"
     tts_output_format: str = "mp3_44100_128"
 
-    @field_validator("style", mode="before")
-    @classmethod
-    def normalize_style(cls, value):
-        # Accept float/int, numeric strings, or special strings like "none" to omit
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            lowered = value.strip().lower()
-            if lowered in {"", "none", "null", "nil"}:
-                return None
-            try:
-                return float(value)
-            except ValueError as e:
-                raise ValueError("style must be a float or 'none'") from e
-        raise ValueError("style must be a float, numeric string, or 'none'")
+    
 
 # Note: file-based config loading has been removed intentionally.
 

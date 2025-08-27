@@ -41,7 +41,19 @@ def _extract_audio_base64(response: Any) -> Optional[str]:
 
 
 
-def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, *, model_id: str, output_format: str, style: Optional[float]) -> Tuple[Path, CharacterAlignmentResponseModel]:
+def synthesize_voice_with_alignment(
+    text: str,
+    voice_id: str,
+    output_dir: Path,
+    *,
+    model_id: str,
+    output_format: str,
+    stability: Optional[float] = None,
+    similarity_boost: Optional[float] = None,
+    style: Optional[float] = None,
+    use_speaker_boost: Optional[bool] = None,
+    speed: Optional[float] = None,
+) -> Tuple[Path, CharacterAlignmentResponseModel]:
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / "voice.mp3"
 
@@ -57,15 +69,46 @@ def synthesize_voice_with_alignment(text: str, voice_id: str, output_dir: Path, 
     )
 
     # Generate audio with character-level alignment per ElevenLabs docs
-    # Build kwargs conditionally to omit voice_settings when style is None
+    # Build kwargs conditionally to omit voice_settings when no settings provided
     tts_kwargs: Dict[str, Any] = {
         "voice_id": voice_id,
         "text": text,
         "model_id": model_id,
         "output_format": output_format,
     }
+    # Collect requested settings
+    requested_settings: Dict[str, Any] = {}
+    if stability is not None:
+        requested_settings["stability"] = stability
+    if similarity_boost is not None:
+        requested_settings["similarity_boost"] = similarity_boost
     if style is not None:
-        tts_kwargs["voice_settings"] = VoiceSettings(style=style)
+        requested_settings["style"] = style
+    if use_speaker_boost is not None:
+        requested_settings["use_speaker_boost"] = use_speaker_boost
+    if speed is not None:
+        requested_settings["speed"] = speed
+
+    # Filter to fields supported by installed SDK to avoid runtime errors
+    allowed_fields = set()
+    try:
+        # pydantic v2 models expose model_fields
+        model_fields = getattr(VoiceSettings, "model_fields", None)
+        if model_fields:
+            allowed_fields = set(model_fields.keys())
+        else:
+            annotations = getattr(VoiceSettings, "__annotations__", None)
+            if annotations:
+                allowed_fields = set(annotations.keys())
+    except Exception:
+        allowed_fields = set()
+
+    if requested_settings:
+        settings_kwargs = (
+            {k: v for k, v in requested_settings.items() if not allowed_fields or k in allowed_fields}
+        )
+        if settings_kwargs:
+            tts_kwargs["voice_settings"] = VoiceSettings(**settings_kwargs)
 
     response = client.text_to_speech.convert_with_timestamps(**tts_kwargs)
     # Debug: log which attributes exist on the response
@@ -112,7 +155,11 @@ async def synthesize_voice_with_alignment_async(
     *,
     model_id: str,
     output_format: str,
-    style: Optional[float], Optional[speed],
+    stability: Optional[float] = None,
+    similarity_boost: Optional[float] = None,
+    style: Optional[float] = None,
+    use_speaker_boost: Optional[bool] = None,
+    speed: Optional[float] = None,
 ) -> _Tuple[Path, CharacterAlignmentResponseModel]:
     """Async ElevenLabs TTS with alignment; requires AsyncElevenLabs."""
     from elevenlabs.client import AsyncElevenLabs  # type: ignore
@@ -131,15 +178,43 @@ async def synthesize_voice_with_alignment_async(
         len(text or ""),
     )
 
-    # Build kwargs conditionally to omit voice_settings when style is None
+    # Build kwargs conditionally to omit voice_settings when no settings provided
     tts_kwargs: Dict[str, Any] = {
         "voice_id": voice_id,
         "text": text,
         "model_id": model_id,
         "output_format": output_format,
     }
+    requested_settings: Dict[str, Any] = {}
+    if stability is not None:
+        requested_settings["stability"] = stability
+    if similarity_boost is not None:
+        requested_settings["similarity_boost"] = similarity_boost
     if style is not None:
-        tts_kwargs["voice_settings"] = VoiceSettings(style=style)
+        requested_settings["style"] = style
+    if use_speaker_boost is not None:
+        requested_settings["use_speaker_boost"] = use_speaker_boost
+    if speed is not None:
+        requested_settings["speed"] = speed
+
+    allowed_fields = set()
+    try:
+        model_fields = getattr(VoiceSettings, "model_fields", None)
+        if model_fields:
+            allowed_fields = set(model_fields.keys())
+        else:
+            annotations = getattr(VoiceSettings, "__annotations__", None)
+            if annotations:
+                allowed_fields = set(annotations.keys())
+    except Exception:
+        allowed_fields = set()
+
+    if requested_settings:
+        settings_kwargs = (
+            {k: v for k, v in requested_settings.items() if not allowed_fields or k in allowed_fields}
+        )
+        if settings_kwargs:
+            tts_kwargs["voice_settings"] = VoiceSettings(**settings_kwargs)
 
     response = await client.text_to_speech.convert_with_timestamps(**tts_kwargs)  # type: ignore[attr-defined]
 
