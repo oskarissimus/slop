@@ -145,18 +145,21 @@ def _extract_iso_published_at(item: dict) -> Optional[str]:
     return None
 
 
-def _fetch_transcript_via_rapidapi(video_id: str) -> Optional[str]:
-    """Fetch transcript text via RapidAPI yt-api video/transcript."""
+def _fetch_transcript_via_rapidapi(video_id: str, lang: Optional[str] = None) -> Optional[str]:
+    """Fetch transcript text via RapidAPI yt-api subtitle endpoint."""
     api_key = os.getenv("RAPIDAPI_KEY")
     if not api_key:
         return None
-    url = "https://yt-api.p.rapidapi.com/video/transcript"
+    url = "https://yt-api.p.rapidapi.com/subtitle"
     headers = {
         "x-rapidapi-key": api_key,
         "x-rapidapi-host": "yt-api.p.rapidapi.com",
     }
     try:
-        resp = requests.get(url, headers=headers, params={"videoId": video_id}, timeout=30)
+        params = {"id": video_id}
+        if lang:
+            params["lang"] = lang
+        resp = requests.get(url, headers=headers, params=params, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         segments = None
@@ -189,13 +192,22 @@ def _fetch_transcript_via_rapidapi(video_id: str) -> Optional[str]:
 
 
 def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]] = None, max_chars: int = 8000, use_generated_fallback: bool = True) -> Optional[str]:
-    text = _fetch_transcript_via_rapidapi(video_id)
-    if not text:
-        return None
-    text = " ".join(text.split())
-    if len(text) > max_chars:
-        text = text[:max_chars].rsplit(" ", 1)[0] + "…"
-    return text
+    langs = preferred_languages
+    if langs is None:
+        env_langs = os.getenv("YOUTUBE_TRANSCRIPT_LANGS", "").strip()
+        if env_langs:
+            langs = [lang.strip() for lang in env_langs.split(",") if lang.strip()]
+        else:
+            langs = ["en"]
+
+    for lang in langs:
+        text = _fetch_transcript_via_rapidapi(video_id, lang)
+        if text:
+            text = " ".join(text.split())
+            if len(text) > max_chars:
+                text = text[:max_chars].rsplit(" ", 1)[0] + "…"
+            return text
+    return None
 
 
 def parse_published_at_iso8601(ts: str) -> Optional[datetime]:
