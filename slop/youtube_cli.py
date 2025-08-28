@@ -20,6 +20,20 @@ def ensure_env_loaded() -> None:
 
 
 @app.command()
+def auth(
+    credentials_dir: str = typer.Option(
+        str(Path.cwd()),
+        help="Directory to store OAuth credentials (client_secret.json, token.json)",
+    ),
+):
+    """Run OAuth flow and save token.json in the credentials directory."""
+    ensure_env_loaded()
+    uploader = YouTubeUploader(credentials_dir=Path(credentials_dir))
+    token_path = uploader.authorize()
+    console.print(f"[green]Saved YouTube OAuth token to: {token_path}")
+
+
+@app.command()
 def upload(
     video_path: str = typer.Argument(..., help="Path to the MP4 file to upload"),
     title: str = typer.Option(None, help="Video title. Defaults to file name"),

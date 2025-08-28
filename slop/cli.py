@@ -131,6 +131,17 @@ def _default(
 
 
 @app.command()
+def youtube_auth(
+    credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for YouTube OAuth credentials"),
+):
+    """Generate or refresh YouTube OAuth token and save to token.json."""
+    ensure_env_loaded()
+    uploader = YouTubeUploader(credentials_dir=Path(credentials_dir))
+    token_path = uploader.authorize()
+    console.print(f"[green]Saved YouTube OAuth token to: {token_path}")
+
+
+@app.command()
 def run_once(
     output_dir: str = typer.Option("outputs", help="Directory for outputs"),
     upload: bool = typer.Option(False, help="Upload the generated video to YouTube"),

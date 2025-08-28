@@ -129,6 +129,16 @@ class YouTubeUploader:
                     pass
         return creds
 
+    def authorize(self) -> Path:
+        """Run OAuth flow to generate or refresh token.json and return its path.
+
+        Ensures `client_secret.json` exists (or can be materialized from env),
+        launches the local server flow if needed, and writes `token.json`.
+        """
+        # This will perform refresh or interactive auth as needed and persist token
+        _ = self._get_credentials()
+        return self.token_path
+
     def _build_service(self):
         creds = self._get_credentials()
         return build("youtube", "v3", credentials=creds)

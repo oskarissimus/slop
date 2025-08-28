@@ -290,7 +290,7 @@ def check_for_new_video_and_get_transcript(
     channel_handle_or_id: str,
     credentials_dir: Path,
     preferred_languages: Optional[list[str]] = None,
-    freshness_hours: int = 2400,
+    freshness_hours: int = 24,
     max_candidates: int = 5,
     use_generated_fallback: bool = True,
 ) -> Optional[tuple[str, str]]:
