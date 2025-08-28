@@ -13,11 +13,11 @@ class AppConfig(BaseModel):
     num_images: int = 12
     voice_id: str = "d4Z5Fvjohw3zxGpV8XUV"
     # ElevenLabs voice settings (Optional so they can be omitted if None)
-    stability: Optional[float] = none
-    similarity_boost: Optional[float] = none
+    stability: Optional[float] = None
+    similarity_boost: Optional[float] = None
     style: Optional[float] = 0.34
     use_speaker_boost: Optional[bool] = True
-    speed: Optional[float] = none
+    speed: Optional[float] = None
     #d4Z5Fvjohw3zxGpV8XUV - Maria float = 0.34
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
