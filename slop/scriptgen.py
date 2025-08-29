@@ -9,7 +9,6 @@ from pydantic import BaseModel, ValidationError
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from .config import AppConfig
 from .prompts import (
     COMBINED_GENERATION_SYSTEM_MESSAGE,
     get_combined_generation_user_prompt,
@@ -26,6 +25,12 @@ class Scenario(BaseModel):
     scenes: List[Scene]
 
 
+class CombinedOutput(BaseModel):
+    """Top-level structured output expected from the LLM."""
+    topic: str
+    scenes: List[Scene]
+
+
 @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3))
 def generate_topic_and_scenes(
     *,
@@ -33,6 +38,7 @@ def generate_topic_and_scenes(
     target_duration_seconds: int,
     num_scenes: int,
     model: str = "gpt-4o-mini",
+    temperature: float = 0.7,
 ) -> Tuple[str, List[Scene]]:
     """Generate both a topic and structured scenes in a single model call.
 
@@ -66,22 +72,48 @@ def generate_topic_and_scenes(
 
     system_msg = COMBINED_GENERATION_SYSTEM_MESSAGE
     user_msg = get_combined_generation_user_prompt(input_for_prompt, target_words, num_scenes)
-    resp = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": user_msg},
-        ],
-        temperature=0.7,
-        max_tokens=2200,
-        response_format={"type": "json_object"},
-    )
+    # Prefer strict structured outputs with a JSON Schema. Fallback to json_object if unsupported.
+    json_schema_payload = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "scene_generation_output",
+            "strict": True,
+            "schema": CombinedOutput.model_json_schema(),
+        },
+    }
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=temperature,
+            response_format=json_schema_payload,
+        )
+    except Exception:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": user_msg},
+            ],
+            temperature=temperature,
+            response_format={"type": "json_object"},
+        )
+
     content = resp.choices[0].message.content or "{}"
-    data = json.loads(content)
-    raw_topic = str(data.get("topic", "")).strip()
-    scenario_data = {"scenes": data.get("scenes", [])}
-    scenario = Scenario.model_validate(scenario_data)
-    scenes = list(scenario.scenes)
+
+    # Validate and parse via Pydantic to ensure structure is correct
+    try:
+        combined = CombinedOutput.model_validate_json(content)
+    except ValidationError:
+        data = json.loads(content)
+        combined = CombinedOutput.model_validate(data)
+
+    raw_topic = str(combined.topic).strip()
+    scenes = list(combined.scenes)
     if len(scenes) > num_scenes:
         scenes = scenes[:num_scenes]
     elif len(scenes) < num_scenes and scenes:

@@ -39,6 +39,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         target_duration_seconds=config.duration_seconds,
         num_scenes=num_scenes,
         model=config.chat_model,
+        temperature=config.temperature,
     )
     topic = sanitize_title(topic)
 
