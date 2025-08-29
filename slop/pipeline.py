@@ -38,7 +38,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         input_text=user_input,
         target_duration_seconds=config.duration_seconds,
         num_scenes=num_scenes,
-        model=config.chat_model,
+        model=config.scene_llm_model,
     )
     topic = sanitize_title(topic)
 
