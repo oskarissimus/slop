@@ -25,8 +25,8 @@ class AppConfig(BaseModel):
     #Bx2lBwIZJBilRBVc3AGO - kamień stulecia
 
     # Runtime/model knobs (production defaults)
-    chat_model: str = "gpt-4o-mini"
-    scene_llm_model: str = "gpt-4o-mini"
+    chat_model: str = "gpt-5"
+    scene_llm_model: str = "gpt-5"
     image_model: str = "gpt-image-1"
     image_quality: Literal["low", "medium", "high"] = "medium"
     tts_model_id: str = "eleven_v3"
