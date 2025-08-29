@@ -41,6 +41,14 @@ def ensure_env_loaded() -> None:
     _configure_logging()
 
 
+def _format_timedelta_human(delta: timedelta) -> str:
+    total_seconds = int(delta.total_seconds())
+    days = total_seconds // 86400
+    hours = (total_seconds % 86400) // 3600
+    minutes = (total_seconds % 3600) // 60
+    return f"{days}d {hours}h {minutes}m"
+
+
 def validate_required_env() -> None:
     missing = []
     if not os.getenv("OPENAI_API_KEY"):
@@ -215,6 +223,8 @@ def generate_from_channel_if_new(
     output_dir: str = typer.Option("outputs", help="Directory for outputs"),
     upload: bool = typer.Option(True, help="Upload the generated video to YouTube when created"),
     use_generated_fallback: bool = typer.Option(True, help="(Deprecated) No longer used; transcripts come from RapidAPI yt-api"),
+    freshness_hours: int = typer.Option(24, help="Max age (hours) for a video to consider"),
+    max_candidates: int = typer.Option(5, help="How many recent uploads to scan"),
 ) -> None:
     """Check channel for a new video in the last 24h using RapidAPI; if found, use its transcript as PROMPT and generate/upload."""
     ensure_env_loaded()
@@ -227,11 +237,42 @@ def generate_from_channel_if_new(
 
     credentials_path = Path(credentials_dir)
 
+    # Search summary logging
+    try:
+        monitor = YouTubePublicMonitor(credentials_dir=credentials_path)
+        channel_id = monitor.resolve_channel_id(channel_handle)
+        if not channel_id:
+            console.print("[red]Failed to resolve channel; check handle or credentials.")
+            raise typer.Exit(code=1)
+        videos = monitor.fetch_recent_videos(channel_id, max_results=max_candidates)
+        console.print(f"[cyan]Search: channel_id={channel_id} | candidates={len(videos)} | freshness_threshold={freshness_hours}h")
+        if videos:
+            now = datetime.now(timezone.utc)
+            freshest = None
+            freshest_age = None
+            for v in videos:
+                pub_dt = parse_published_at_iso8601(v.published_at)
+                if not pub_dt:
+                    continue
+                age = now - pub_dt
+                if freshest_age is None or age < freshest_age:
+                    freshest_age = age
+                    freshest = v
+            if freshest and freshest_age is not None:
+                age_str = _format_timedelta_human(freshest_age)
+                console.print(f"[cyan]Newest: {freshest.title} ({freshest.video_id}) | published={freshest.published_at} | age={age_str}")
+        else:
+            console.print("[yellow]No recent videos returned by API.")
+    except Exception as e:
+        console.print(f"[yellow]Search summary logging failed (continuing): {e}")
+
     try:
         res = check_for_new_video_and_get_transcript(
             channel_handle_or_id=channel_handle,
             credentials_dir=credentials_path,
             preferred_languages=None,
+            freshness_hours=freshness_hours,
+            max_candidates=max_candidates,
             use_generated_fallback=use_generated_fallback,
         )
     except Exception as e:
