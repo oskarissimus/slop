@@ -35,7 +35,8 @@ class YouTubeUploader:
         self.credentials_dir = credentials_dir
         self.credentials_dir.mkdir(parents=True, exist_ok=True)
         self.client_secret_path = self.credentials_dir / "client_secret.json"
-        self.token_path = self.credentials_dir / "token.json"
+        # Use a dedicated token file for YouTube
+        self.token_path = self.credentials_dir / "youtube_token.json"
 
     def _materialize_oauth_files_from_env(self) -> None:
         """Best-effort: write client_secret.json and token.json from env vars if provided.

@@ -18,3 +18,5 @@ venv/
 .env
 client_secret.json
 token.json
+drive_token.json
+youtube_token.json

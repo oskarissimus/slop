@@ -16,6 +16,7 @@ from .pipeline import generate_video_pipeline
 from .youtube_uploader import YouTubeUploader, UploadMetadata
 from .utils import sanitize_title
 from .youtube_monitor import check_for_new_video_and_get_transcript, YouTubePublicMonitor, fetch_transcript_text, parse_published_at_iso8601
+from .drive_uploader import DriveUploader
 
 
 console = Console()
@@ -68,6 +69,8 @@ def _default(
     ctx: typer.Context,
     output_dir: str = typer.Option("outputs", help="Directory for outputs"),
     upload: bool = typer.Option(False, help="Upload the generated video to YouTube"),
+    drive_upload: bool = typer.Option(False, help="Also upload outputs to Google Drive (work dir + MP4)"),
+    drive_parent_folder_id: Optional[str] = typer.Option(None, help="Optional Drive parent folder ID to upload into"),
     title: Optional[str] = typer.Option(None, help="YouTube title (defaults to generated topic)"),
     description: str = typer.Option("", help="YouTube description"),
     tags: Optional[str] = typer.Option(None, help="Comma-separated YouTube tags"),
@@ -135,6 +138,19 @@ def _default(
         except Exception as e:
             console.print(f"[red]YouTube upload failed: {e}")
 
+    if drive_upload:
+        try:
+            uploader = DriveUploader(credentials_dir=Path(credentials_dir))
+            parent_id = drive_parent_folder_id or os.getenv("DRIVE_PARENT_FOLDER_ID") or None
+            basename = Path(result.video_path).stem
+            work_dir = Path(output_dir) / basename
+            folder_id = uploader.upload_directory(work_dir, parent_folder_id=parent_id, make_shareable=True)
+            file_res = uploader.upload_file(Path(result.video_path), parent_folder_id=folder_id, make_shareable=True)
+            link_note = f" | link: {file_res.web_view_link}" if file_res.web_view_link else ""
+            console.print(f"[green]Uploaded to Drive folder: {folder_id}; MP4 file id: {file_res.file_id}{link_note}")
+        except Exception as e:
+            console.print(f"[red]Drive upload failed: {e}")
+
 # Removed `init` command as we no longer write a default config file
 
 
@@ -150,9 +166,22 @@ def youtube_auth(
 
 
 @app.command()
+def drive_auth(
+    credentials_dir: str = typer.Option(str(Path.cwd()), help="Directory for Google OAuth credentials (client_secret.json, token.json)"),
+):
+    """Generate or refresh Google OAuth token for Drive and save to token.json."""
+    ensure_env_loaded()
+    uploader = DriveUploader(credentials_dir=Path(credentials_dir))
+    token_path = uploader.authorize()
+    console.print(f"[green]Saved Google OAuth token (Drive) to: {token_path}")
+
+
+@app.command()
 def run_once(
     output_dir: str = typer.Option("outputs", help="Directory for outputs"),
     upload: bool = typer.Option(False, help="Upload the generated video to YouTube"),
+    drive_upload: bool = typer.Option(False, help="Also upload outputs to Google Drive (work dir + MP4)"),
+    drive_parent_folder_id: Optional[str] = typer.Option(None, help="Optional Drive parent folder ID to upload into"),
     title: Optional[str] = typer.Option(None, help="YouTube title (defaults to generated topic)"),
     description: str = typer.Option("", help="YouTube description"),
     tags: Optional[str] = typer.Option(None, help="Comma-separated YouTube tags"),
@@ -214,6 +243,19 @@ def run_once(
             console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
         except Exception as e:
             console.print(f"[red]YouTube upload failed: {e}")
+
+    if drive_upload:
+        try:
+            uploader = DriveUploader(credentials_dir=Path(credentials_dir))
+            parent_id = drive_parent_folder_id or os.getenv("DRIVE_PARENT_FOLDER_ID") or None
+            basename = Path(result.video_path).stem
+            work_dir = Path(output_dir) / basename
+            folder_id = uploader.upload_directory(work_dir, parent_folder_id=parent_id, make_shareable=True)
+            file_res = uploader.upload_file(Path(result.video_path), parent_folder_id=folder_id, make_shareable=True)
+            link_note = f" | link: {file_res.web_view_link}" if file_res.web_view_link else ""
+            console.print(f"[green]Uploaded to Drive folder: {folder_id}; MP4 file id: {file_res.file_id}{link_note}")
+        except Exception as e:
+            console.print(f"[red]Drive upload failed: {e}")
 
 
 @app.command()
