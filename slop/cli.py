@@ -267,6 +267,8 @@ def generate_from_channel_if_new(
     use_generated_fallback: bool = typer.Option(True, help="(Deprecated) No longer used; transcripts come from RapidAPI yt-api"),
     freshness_hours: int = typer.Option(24, help="Max age (hours) for a video to consider"),
     max_candidates: int = typer.Option(5, help="How many recent uploads to scan"),
+    drive_upload: bool = typer.Option(False, help="Also upload outputs to Google Drive (work dir + MP4)"),
+    drive_parent_folder_id: Optional[str] = typer.Option(None, help="Optional Drive parent folder ID to upload into"),
 ) -> None:
     """Check channel for a new video in the last 24h using RapidAPI; if found, use its transcript as PROMPT and generate/upload."""
     ensure_env_loaded()
@@ -352,6 +354,20 @@ def generate_from_channel_if_new(
             console.print(f"[green]Uploaded to YouTube. Video ID: {new_video_id}")
         except Exception as e:
             console.print(f"[red]YouTube upload failed: {e}")
+            raise typer.Exit(code=1)
+
+    if drive_upload:
+        try:
+            uploader = DriveUploader(credentials_dir=credentials_path)
+            parent_id = drive_parent_folder_id or os.getenv("DRIVE_PARENT_FOLDER_ID") or None
+            basename = Path(result.video_path).stem
+            work_dir = Path(output_dir) / basename
+            folder_id = uploader.upload_directory(work_dir, parent_folder_id=parent_id, make_shareable=True)
+            file_res = uploader.upload_file(Path(result.video_path), parent_folder_id=folder_id, make_shareable=True)
+            link_note = f" | link: {file_res.web_view_link}" if file_res.web_view_link else ""
+            console.print(f"[green]Uploaded to Drive folder: {folder_id}; MP4 file id: {file_res.file_id}{link_note}")
+        except Exception as e:
+            console.print(f"[red]Drive upload failed: {e}")
             raise typer.Exit(code=1)
 
 
