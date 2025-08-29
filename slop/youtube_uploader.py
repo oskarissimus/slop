@@ -106,12 +106,29 @@ class YouTubeUploader:
             creds = Credentials.from_authorized_user_file(str(self.token_path), YOUTUBE_UPLOAD_SCOPES)
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-                # Save refreshed token
                 try:
-                    self.token_path.write_text(creds.to_json())
+                    creds.refresh(Request())
+                    # Save refreshed token
+                    try:
+                        self.token_path.write_text(creds.to_json())
+                    except Exception:
+                        pass
                 except Exception:
-                    pass
+                    # Refresh failed (e.g., invalid_grant: expired or revoked). Fall back to interactive flow.
+                    if not self.client_secret_path.exists():
+                        raise FileNotFoundError(
+                            f"Missing client secrets at {self.client_secret_path}. "
+                            f"Download OAuth client credentials (Desktop app) from Google Cloud Console and save as client_secret.json"
+                        )
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                        str(self.client_secret_path), scopes=YOUTUBE_UPLOAD_SCOPES
+                    )
+                    creds = flow.run_local_server(port=0)
+                    # Save the credentials for the next run
+                    try:
+                        self.token_path.write_text(creds.to_json())
+                    except Exception:
+                        pass
             else:
                 if not self.client_secret_path.exists():
                     raise FileNotFoundError(
