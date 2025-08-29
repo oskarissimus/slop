@@ -227,24 +227,32 @@ def generate_from_channel_if_new(
 
     credentials_path = Path(credentials_dir)
 
-    res = check_for_new_video_and_get_transcript(
-        channel_handle_or_id=channel_handle,
-        credentials_dir=credentials_path,
-        preferred_languages=None,
-        use_generated_fallback=use_generated_fallback,
-    )
+    try:
+        res = check_for_new_video_and_get_transcript(
+            channel_handle_or_id=channel_handle,
+            credentials_dir=credentials_path,
+            preferred_languages=None,
+            use_generated_fallback=use_generated_fallback,
+        )
+    except Exception as e:
+        console.print(f"[red]Failed to check channel for new videos: {e}")
+        raise typer.Exit(code=1)
+
     if not res:
-        console.print("[yellow]No new video detected or no transcript available; nothing to do.")
-        raise typer.Exit(code=0)
+        console.print("[red]No new video detected or no transcript available; failing as requested.")
+        raise typer.Exit(code=2)
 
     video_id, transcript = res
-    # Use transcript as PROMPT
     os.environ["PROMPT"] = transcript
 
-    config = AppConfig()
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-    result = generate_video_pipeline(config=config, output_dir=Path(output_dir))
-    console.print(f"[green]Generated video from transcript of {channel_handle} latest ({video_id}): {result.video_path}")
+    try:
+        config = AppConfig()
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        result = generate_video_pipeline(config=config, output_dir=Path(output_dir))
+        console.print(f"[green]Generated video from transcript of {channel_handle} latest ({video_id}): {result.video_path}")
+    except Exception as e:
+        console.print(f"[red]Video generation failed: {e}")
+        raise typer.Exit(code=1)
 
     if upload:
         try:
@@ -261,6 +269,7 @@ def generate_from_channel_if_new(
             console.print(f"[green]Uploaded to YouTube. Video ID: {new_video_id}")
         except Exception as e:
             console.print(f"[red]YouTube upload failed: {e}")
+            raise typer.Exit(code=1)
 
 
 @app.command()

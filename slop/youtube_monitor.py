@@ -266,7 +266,7 @@ def fetch_transcript_text(video_id: str, preferred_languages: Optional[list[str]
             langs = ["en"]
 
     for lang in langs:
-        text = _fetch_transcript_via_rapidapi(video_id, lang)
+        text = _fetch_transcript_via_rapidapi(video_id, [lang])
         if text:
             text = " ".join(text.split())
             if len(text) > max_chars:
