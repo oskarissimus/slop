@@ -31,7 +31,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Generate and upload to YouTube and Google Drive
-        run: uv run --env-file=.env --python 3.11 python main.py
+        run: uv run --python 3.11 slop generate
 
       - name: Upload artifact (latest video)
         uses: actions/upload-artifact@v4
