@@ -73,48 +73,56 @@ class YouTubeUploader:
         self._materialize_oauth_files_from_config_or_env()
 
         creds: Optional[Credentials] = None
-        if self.token_path.exists():
+        # Fail fast if required files are missing
+        if not self.client_secret_path.exists():
+            raise FileNotFoundError(
+                f"Missing client secrets at {self.client_secret_path}. "
+                "Provide oauth_client_json in settings or place client_secret.json in the credentials directory."
+            )
+        if not self.token_path.exists():
+            raise FileNotFoundError(
+                f"Missing YouTube token at {self.token_path}. "
+                "Provide youtube_token_json in settings or place youtube_token.json in the credentials directory."
+            )
+
+        # Load token and validate
+        try:
             creds = Credentials.from_authorized_user_file(str(self.token_path), YOUTUBE_UPLOAD_SCOPES)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
+        except Exception as e:
+            raise RuntimeError(
+                f"Invalid YouTube OAuth token JSON at {self.token_path}: {e}. "
+                "Ensure a valid token with scopes: " + ", ".join(YOUTUBE_UPLOAD_SCOPES)
+            )
+
+        # Refresh if expired and refresh_token present; otherwise fail
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
                 try:
                     creds.refresh(Request())
-                    # Save refreshed token
                     try:
                         self.token_path.write_text(creds.to_json())
                     except Exception:
                         pass
-                except Exception:
-                    # Refresh failed (e.g., invalid_grant: expired or revoked). Fall back to interactive flow.
-                    if not self.client_secret_path.exists():
-                        raise FileNotFoundError(
-                            f"Missing client secrets at {self.client_secret_path}. "
-                            f"Download OAuth client credentials (Desktop app) from Google Cloud Console and save as client_secret.json"
-                        )
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        str(self.client_secret_path), scopes=YOUTUBE_UPLOAD_SCOPES
-                    )
-                    creds = flow.run_local_server(port=0)
-                    # Save the credentials for the next run
-                    try:
-                        self.token_path.write_text(creds.to_json())
-                    except Exception:
-                        pass
+                except Exception as e:
+                    raise RuntimeError(
+                        "Failed to refresh YouTube OAuth token. Re-authorize locally and update the stored token. "
+                        "Run: `uv run slop-youtube auth --credentials-dir ./.youtube` and then update the token file."
+                    ) from e
             else:
-                if not self.client_secret_path.exists():
-                    raise FileNotFoundError(
-                        f"Missing client secrets at {self.client_secret_path}. "
-                        f"Download OAuth client credentials (Desktop app) from Google Cloud Console and save as client_secret.json"
-                    )
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    str(self.client_secret_path), scopes=YOUTUBE_UPLOAD_SCOPES
+                raise RuntimeError(
+                    "Invalid YouTube OAuth token (no refresh token or token invalid). "
+                    "Re-authorize and provide a valid token with required scopes."
                 )
-                creds = flow.run_local_server(port=0)
-                # Save the credentials for the next run
-                try:
-                    self.token_path.write_text(creds.to_json())
-                except Exception:
-                    pass
+
+        # Ensure required scopes are present
+        existing_scopes = set(creds.scopes or [])
+        required_scopes = set(YOUTUBE_UPLOAD_SCOPES)
+        if not required_scopes.issubset(existing_scopes):
+            raise RuntimeError(
+                "YouTube OAuth token is missing required scopes. "
+                f"Required: {', '.join(required_scopes)} | Present: {', '.join(sorted(existing_scopes))}. "
+                "Generate a new token with the required scopes."
+            )
         return creds
 
     def authorize(self) -> Path:

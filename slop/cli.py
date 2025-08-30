@@ -9,13 +9,14 @@ from datetime import datetime, timezone
 import typer
 from rich.console import Console
 from dotenv import load_dotenv
+from google_auth_oauthlib.flow import InstalledAppFlow
 
 from .config import AppConfig
 from .pipeline import generate_video_pipeline
 from .utils import InsufficientOpenAIFundsError, sanitize_title
 from .youtube_monitor import check_for_new_video_and_get_transcript, YouTubePublicMonitor, parse_published_at_iso8601
-from .youtube_uploader import YouTubeUploader, UploadMetadata
-from .drive_uploader import DriveUploader
+from .youtube_uploader import YouTubeUploader, UploadMetadata, YOUTUBE_UPLOAD_SCOPES
+from .drive_uploader import DriveUploader, DRIVE_SCOPES
 
 
 console = Console()
@@ -124,6 +125,71 @@ def generate() -> None:
         console.print(f"[red]Drive upload failed: {e}")
         raise typer.Exit(code=5)
 
+
+@app.command(name="auth-youtube")
+def auth_youtube(
+    credentials_dir: str = typer.Option(
+        str(Path.cwd()),
+        help="Directory to store OAuth credentials (client_secret.json, youtube_token.json)",
+    ),
+) -> None:
+    """Interactive OAuth flow to create/update YouTube token file."""
+    _ensure_env_loaded()
+    config = AppConfig()
+
+    cred_dir = Path(credentials_dir)
+    cred_dir.mkdir(parents=True, exist_ok=True)
+    client_secret_path = cred_dir / "client_secret.json"
+    token_path = cred_dir / "youtube_token.json"
+
+    if not client_secret_path.exists():
+        content = getattr(config, "oauth_client_json", None)
+        if content and content.strip().startswith("{"):
+            client_secret_path.write_text(content, encoding="utf-8")
+        else:
+            typer.secho(
+                f"Missing client_secret.json at {client_secret_path}. Provide oauth_client_json in .env or place the file and retry.",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+
+    flow = InstalledAppFlow.from_client_secrets_file(str(client_secret_path), scopes=YOUTUBE_UPLOAD_SCOPES)
+    creds = flow.run_local_server(port=0)
+    token_path.write_text(creds.to_json())
+    console.print(f"[green]Saved YouTube OAuth token to: {token_path}")
+
+
+@app.command(name="auth-drive")
+def auth_drive(
+    credentials_dir: str = typer.Option(
+        str(Path.cwd()),
+        help="Directory to store OAuth credentials (client_secret.json, drive_token.json)",
+    ),
+) -> None:
+    """Interactive OAuth flow to create/update Google Drive token file."""
+    _ensure_env_loaded()
+    config = AppConfig()
+
+    cred_dir = Path(credentials_dir)
+    cred_dir.mkdir(parents=True, exist_ok=True)
+    client_secret_path = cred_dir / "client_secret.json"
+    token_path = cred_dir / "drive_token.json"
+
+    if not client_secret_path.exists():
+        content = getattr(config, "oauth_client_json", None)
+        if content and content.strip().startswith("{"):
+            client_secret_path.write_text(content, encoding="utf-8")
+        else:
+            typer.secho(
+                f"Missing client_secret.json at {client_secret_path}. Provide oauth_client_json in .env or place the file and retry.",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+
+    flow = InstalledAppFlow.from_client_secrets_file(str(client_secret_path), scopes=DRIVE_SCOPES)
+    creds = flow.run_local_server(port=0)
+    token_path.write_text(creds.to_json())
+    console.print(f"[green]Saved Drive OAuth token to: {token_path}")
 
 @app.command(name="generate-reaction")
 def generate_reaction() -> None:
