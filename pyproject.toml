@@ -20,11 +20,11 @@ dependencies = [
     "google-auth-oauthlib>=1.2.0",
     "google-auth-httplib2>=0.2.0",
     "youtube-transcript-api==0.6.2",
+    "pydantic-settings>=2.10.1",
 ]
 
 [project.scripts]
 slop = "slop.cli:app"
-slop-youtube = "slop.youtube_cli:app"
 
 [tool.uv]
 package = true

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class AppConfig(BaseModel):
+class AppConfig(BaseSettings):
+    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
+
     duration_seconds: int = 210
     fps: int = 24
     resolution_width: int = 1024
@@ -33,8 +35,9 @@ class AppConfig(BaseModel):
     tts_model_id: str = "eleven_v3"
     tts_output_format: str = "mp3_44100_128"
 
-    
+    # YouTube upload visibility
+    youtube_privacy_status: Literal["public", "unlisted", "private"] = "private"
 
-# Note: file-based config loading has been removed intentionally.
-
-
+    openai_api_key: str
+    elevenlabs_api_key: str
+    drive_parent_folder_id: str

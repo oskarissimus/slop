@@ -7,6 +7,9 @@ from typing import List, Tuple, Optional
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 from openai import AsyncOpenAI
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(3))
@@ -28,6 +31,7 @@ async def _generate_single_image_openai_async(
 		"size": size,
 		"n": 1,
 	}
+	logger.info("[images/openai] request | i=%d size=%s model=%s", index, size, model)
 	resp = await client.images.generate(**params)
 	b64 = resp.data[0].b64_json
 	img_bytes = base64.b64decode(b64)
@@ -36,7 +40,7 @@ async def _generate_single_image_openai_async(
 		f.write(img_bytes)
 	try:
 		sz = os.path.getsize(out_path)
-		print(f"[images/openai] saved i={index} -> {out_path} ({sz} bytes)")
+		logger.info("[images/openai] saved | i=%d path=%s bytes=%d", index, str(out_path), sz)
 	except Exception:
 		pass
 	# Ensure no alpha channel (avoid transparent images turning into black frames after ffmpeg)
@@ -96,9 +100,13 @@ def generate_images(
 	# Basic run metadata
 	try:
 		preview = (scene_prompts[0] if scene_prompts else "")[:160].replace("\n", " ")
-		print(
-			f"[images] model={image_model} size={image_size} quality={image_quality} "
-			f"num_images={num_images} first_prompt_preview=\"{preview}\""
+		logger.info(
+			"[images] start | model=%s size=%s quality=%s num_images=%d first_prompt_preview=\"%s\"",
+			image_model,
+			image_size,
+			image_quality,
+			num_images,
+			preview,
 		)
 	except Exception:
 		pass
@@ -114,6 +122,7 @@ def generate_images(
 
 	# Always use async for OpenAI image generation with a conservative concurrency cap.
 	concurrency = min(12, max(1, len(scene_prompts)))
+	logger.info("[images] launching async image generation | concurrency=%d", concurrency)
 
 	paths = asyncio.run(
 		_generate_images_async_openai(
@@ -123,7 +132,7 @@ def generate_images(
 	# Print sizes for quick diagnostics
 	try:
 		for p in paths:
-			print(f"[images] file {p} -> {os.path.getsize(p)} bytes")
+			logger.info("[images] file | path=%s bytes=%d", str(p), os.path.getsize(p))
 	except Exception:
 		pass
 	return paths
@@ -152,9 +161,13 @@ async def generate_images_async(
 	# Basic run metadata
 	try:
 		preview = (scene_prompts[0] if scene_prompts else "")[:160].replace("\n", " ")
-		print(
-			f"[images] model={image_model} size={image_size} quality={image_quality} "
-			f"num_images={num_images} first_prompt_preview=\"{preview}\""
+		logger.info(
+			"[images] start/async | model=%s size=%s quality=%s num_images=%d first_prompt_preview=\"%s\"",
+			image_model,
+			image_size,
+			image_quality,
+			num_images,
+			preview,
 		)
 	except Exception:
 		pass
@@ -170,6 +183,7 @@ async def generate_images_async(
 
 	# Always use async for OpenAI image generation with a conservative concurrency cap.
 	concurrency = min(12, max(1, len(scene_prompts)))
+	logger.info("[images/async] launching async image generation | concurrency=%d", concurrency)
 
 	paths = await _generate_images_async_openai(
 		scene_prompts, output_dir, concurrency, model=image_model, size=image_size, quality=image_quality
@@ -177,7 +191,7 @@ async def generate_images_async(
 	# Print sizes for quick diagnostics
 	try:
 		for p in paths:
-			print(f"[images] file {p} -> {os.path.getsize(p)} bytes")
+			logger.info("[images/async] file | path=%s bytes=%d", str(p), os.path.getsize(p))
 	except Exception:
 		pass
 	return paths
@@ -207,6 +221,7 @@ async def _generate_images_async_openai(
 
 	tasks = [run_one(i, p) for i, p in enumerate(prompts)]
 	results = await asyncio.gather(*tasks)
+	logger.info("[images/async] done generating images | count=%d", len(results))
 	ordered_paths: List[Path] = [output_dir / f"frame_{i:03d}.png" for i in range(len(prompts))]
 	for i, path in results:
 		ordered_paths[i] = path

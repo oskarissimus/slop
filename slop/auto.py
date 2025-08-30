@@ -72,7 +72,7 @@ def generate_and_upload(
         description="",
         tags=None,
         category_id="22",
-        privacy_status=privacy_status,
+        privacy_status=config.youtube_privacy_status,
     )
     video_id = uploader.upload_video(video_path=Path(result.video_path), metadata=metadata)
     console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")

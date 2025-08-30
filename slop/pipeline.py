@@ -6,6 +6,7 @@ from pathlib import Path
 import os
 import json
 import asyncio
+import logging
 
 from .config import AppConfig
 from .utils import sanitize_title
@@ -14,6 +15,8 @@ from .images import generate_images, generate_images_async
 from .voice import synthesize_voice_with_alignment, synthesize_voice_with_alignment_async
 from .stitch import stitch_video
 
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class GeneratedVideo:
@@ -30,10 +33,23 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
     work_dir = output_dir / basename
     work_dir.mkdir(parents=True, exist_ok=True)
 
+    logger.info(
+        "[pipeline] start | basename=%s duration=%ds fps=%d size=%dx%d images=%d chat_model=%s image_model=%s",
+        basename,
+        config.duration_seconds,
+        config.fps,
+        config.resolution_width,
+        config.resolution_height,
+        config.num_images,
+        config.chat_model,
+        config.image_model,
+    )
+
     # 1) Always use combined generator (no fallback).
     prompt_raw = os.getenv("PROMPT")
     num_scenes = max(1, config.num_images)
     user_input = prompt_raw.strip() if prompt_raw else ""
+    logger.info("[pipeline] generating topic and scenes | words_target≈%d scenes=%d", int(config.duration_seconds * 2.5), num_scenes)
     topic, scenes = generate_topic_and_scenes(
         input_text=user_input,
         target_duration_seconds=config.duration_seconds,
@@ -41,6 +57,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         model=config.chat_model,
         temperature=config.temperature,
     )
+    logger.info("[pipeline] got topic and scenes | topic=\"%s\" scenes=%d", topic, len(scenes))
     topic = sanitize_title(topic)
 
     # Write scenes to JSON for manual verification and print to stdout
@@ -59,6 +76,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
     script_text = " ".join(s.script for s in scenes).strip()
 
     # 4 & 5) Generate images and synthesize audio concurrently
+    logger.info("[pipeline] starting parallel image+audio generation")
     async def run_parallel() -> tuple[list[Path], Path, object]:
         images_task = generate_images_async(
             image_prompts=image_prompts,
@@ -84,8 +102,14 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         return image_paths, audio_path, alignment
 
     image_paths, audio_path, alignment = asyncio.run(run_parallel())
+    logger.info(
+        "[pipeline] finished image+audio | images=%d audio=%s",
+        len(image_paths),
+        str(audio_path),
+    )
 
     # 6) Stitch video, using alignment to time images if available
+    logger.info("[pipeline] stitching video")
     video_path = stitch_video(
         image_paths=image_paths,
         audio_path=audio_path,
@@ -97,6 +121,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         scenes=scenes,
     )
 
+    logger.info("[pipeline] done | output=%s topic=\"%s\"", str(video_path), topic)
     return GeneratedVideo(video_path=video_path, topic=topic, script_text=script_text)
 
 
