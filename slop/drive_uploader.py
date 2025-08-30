@@ -13,6 +13,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
+from .config import AppConfig
 
 DRIVE_SCOPES = [
     "https://www.googleapis.com/auth/drive.file",  # App-created or opened files
@@ -26,62 +27,38 @@ class DriveUploadResult:
 
 
 class DriveUploader:
-    def __init__(self, credentials_dir: Path) -> None:
+    def __init__(self, credentials_dir: Path, config: AppConfig | None = None) -> None:
         self.credentials_dir = Path(credentials_dir)
         self.credentials_dir.mkdir(parents=True, exist_ok=True)
         # Use separate token filename for Drive to avoid conflicts
         self.client_secret_path = self.credentials_dir / "client_secret.json"
         self.token_path = self.credentials_dir / "drive_token.json"
+        self._config = config
 
-    def _materialize_oauth_files_from_env(self) -> None:
-        # Accept the same env vars as YouTube for client secrets/token to avoid duplication
+    def _materialize_oauth_files_from_config_or_env(self) -> None:
+        # Use only AppConfig-provided JSON if available; otherwise rely on existing files
         if not self.client_secret_path.exists():
-            content_candidates = [
-                os.getenv("GOOGLE_OAUTH_CLIENT_JSON"),
-                os.getenv("YOUTUBE_CLIENT_SECRETS"),
-                os.getenv("YT_CLIENT_SECRET_JSON"),
-            ]
-            path_candidates = [
-                os.getenv("GOOGLE_OAUTH_CLIENT_JSON_PATH"),
-                os.getenv("YOUTUBE_CLIENT_SECRETS_JSON"),
-            ]
-            content_value = next((v for v in content_candidates if v and v.strip()), None)
-            path_value = next((v for v in path_candidates if v and v.strip()), None)
+            content_value = None
+            if self._config and getattr(self._config, "oauth_client_json", None):
+                content_value = self._config.oauth_client_json
             try:
                 if content_value and content_value.strip().startswith("{"):
                     self.client_secret_path.write_text(content_value, encoding="utf-8")
-                elif path_value:
-                    src = Path(path_value)
-                    if src.exists():
-                        self.client_secret_path.write_text(src.read_text(encoding="utf-8"))
             except Exception:
                 pass
 
         if not self.token_path.exists():
-            token_content_candidates = [
-                os.getenv("GOOGLE_OAUTH_TOKEN_JSON"),
-                os.getenv("YOUTUBE_TOKEN_JSON"),
-                os.getenv("YOUTUBE_OAUTH_TOKEN"),
-                os.getenv("YT_TOKEN_JSON"),
-            ]
-            token_path_candidates = [
-                os.getenv("GOOGLE_OAUTH_TOKEN_JSON_PATH"),
-                os.getenv("YOUTUBE_TOKEN_JSON_PATH"),
-            ]
-            t_content = next((v for v in token_content_candidates if v and v.strip()), None)
-            t_path = next((v for v in token_path_candidates if v and v.strip()), None)
+            token_value = None
+            if self._config and getattr(self._config, "drive_token_json", None):
+                token_value = self._config.drive_token_json
             try:
-                if t_content and t_content.strip().startswith("{"):
-                    self.token_path.write_text(t_content, encoding="utf-8")
-                elif t_path:
-                    tsrc = Path(t_path)
-                    if tsrc.exists():
-                        self.token_path.write_text(tsrc.read_text(encoding="utf-8"))
+                if token_value and token_value.strip().startswith("{"):
+                    self.token_path.write_text(token_value, encoding="utf-8")
             except Exception:
                 pass
 
     def _get_credentials(self) -> Credentials:
-        self._materialize_oauth_files_from_env()
+        self._materialize_oauth_files_from_config_or_env()
         creds: Optional[Credentials] = None
         if self.token_path.exists():
             try:

@@ -41,3 +41,9 @@ class AppConfig(BaseSettings):
     openai_api_key: str
     elevenlabs_api_key: str
     drive_parent_folder_id: str
+
+    # OAuth credentials (single-source fields, optional)
+    # Expect RAW JSON content. If not provided, uploaders will rely on existing files on disk.
+    oauth_client_json: Optional[str] = None
+    drive_token_json: Optional[str] = None
+    youtube_token_json: Optional[str] = None

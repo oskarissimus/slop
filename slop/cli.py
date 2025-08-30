@@ -91,7 +91,10 @@ def generate() -> None:
     # 1) YouTube upload (private by default)
     try:
         title = sanitize_title(result.topic)
-        uploader = YouTubeUploader(credentials_dir=Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))))
+        uploader = YouTubeUploader(
+            credentials_dir=Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))),
+            config=config,
+        )
         metadata = UploadMetadata(
             title=title,
             description="",
@@ -110,7 +113,10 @@ def generate() -> None:
         basename = Path(result.video_path).stem
         work_dir = output_dir / basename
         parent_id = config.drive_parent_folder_id
-        drive = DriveUploader(credentials_dir=Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))))
+        drive = DriveUploader(
+            credentials_dir=Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))),
+            config=config,
+        )
         folder_id = drive.upload_directory(work_dir, parent_folder_id=parent_id, make_shareable=True)
         _ = drive.upload_file(Path(result.video_path), parent_folder_id=folder_id, make_shareable=True)
         console.print(f"[green]Uploaded to Google Drive. Folder ID: {folder_id}")

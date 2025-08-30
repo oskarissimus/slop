@@ -30,6 +30,7 @@ async def _generate_single_image_openai_async(
 		"prompt": prompt,
 		"size": size,
 		"n": 1,
+		"quality": quality,
 	}
 	logger.info("[images/openai] request | i=%d size=%s model=%s", index, size, model)
 	resp = await client.images.generate(**params)

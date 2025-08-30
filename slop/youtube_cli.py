@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 
 from .youtube_uploader import YouTubeUploader, UploadMetadata
+from .config import AppConfig
 
 
 console = Console()
@@ -28,7 +29,8 @@ def auth(
 ):
     """Run OAuth flow and save token.json in the credentials directory."""
     ensure_env_loaded()
-    uploader = YouTubeUploader(credentials_dir=Path(credentials_dir))
+    config = AppConfig()
+    uploader = YouTubeUploader(credentials_dir=Path(credentials_dir), config=config)
     token_path = uploader.authorize()
     console.print(f"[green]Saved YouTube OAuth token to: {token_path}")
 
@@ -60,7 +62,8 @@ def upload(
     if tags:
         tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
-    uploader = YouTubeUploader(credentials_dir=Path(credentials_dir))
+    config = AppConfig()
+    uploader = YouTubeUploader(credentials_dir=Path(credentials_dir), config=config)
 
     metadata = UploadMetadata(
         title=resolved_title,
