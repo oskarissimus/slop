@@ -10,17 +10,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  run:
+  generate:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
       RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-      OAUTH_CLIENT_JSON: ${{ secrets.OAUTH_CLIENT_JSON }}
-      DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
-      DRIVE_PARENT_FOLDER_ID: ${{ secrets.DRIVE_PARENT_FOLDER_ID }}
-      YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
       DURATION_SECONDS: "60"
       NUM_IMAGES: "6"
       IMAGE_QUALITY: "medium"
@@ -37,24 +33,76 @@ jobs:
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Prepare YouTube OAuth credentials (optional; if not using env materialization)
-        if: ${{ env.YOUTUBE_TOKEN_JSON == '' }}
-        run: |
-          mkdir -p ./.youtube
-          echo '${{ secrets.OAUTH_CLIENT_JSON }}' > ./.youtube/client_secret.json
-          echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > ./.youtube/youtube_token.json
-
-
       - name: Install dependencies
         run: uv sync
 
-      - name: Generate reaction video from latest channel upload
+      - name: Generate reaction video only
         run: uv run --python 3.11 slop generate-reaction
 
-
-      - name: Upload artifact (latest video)
+      - name: Upload outputs artifact
         uses: actions/upload-artifact@v4
         with:
-          name: latest-video
-          path: outputs/*.mp4
-          if-no-files-found: ignore
+          name: outputs
+          path: outputs/**
+          if-no-files-found: error
+
+  upload-youtube:
+    needs: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OAUTH_CLIENT_JSON: ${{ secrets.OAUTH_CLIENT_JSON }}
+      YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install Python 3.11 via uv
+        run: uv python install 3.11
+
+      - name: Download outputs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: outputs
+          path: outputs
+
+      - name: Upload to YouTube (non-blocking of Drive)
+        run: |
+          set -euo pipefail
+          VIDEO_PATH=$(ls -1 outputs/*.mp4 | head -n 1)
+          echo "Uploading $VIDEO_PATH to YouTube"
+          uv run --python 3.11 slop upload-youtube "$VIDEO_PATH"
+
+  upload-drive:
+    needs: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OAUTH_CLIENT_JSON: ${{ secrets.OAUTH_CLIENT_JSON }}
+      DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
+      DRIVE_PARENT_FOLDER_ID: ${{ secrets.DRIVE_PARENT_FOLDER_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install Python 3.11 via uv
+        run: uv python install 3.11
+
+      - name: Download outputs artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: outputs
+          path: outputs
+
+      - name: Upload to Google Drive (independent of YouTube)
+        run: |
+          set -euo pipefail
+          VIDEO_PATH=$(ls -1 outputs/*.mp4 | head -n 1)
+          echo "Uploading $VIDEO_PATH and its work dir to Drive"
+          uv run --python 3.11 slop upload-drive "$VIDEO_PATH"

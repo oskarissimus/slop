@@ -5,6 +5,7 @@ from pathlib import Path
 import logging
 import sys
 from datetime import datetime, timezone
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -71,7 +72,7 @@ def _default_output_dir() -> Path:
 
 @app.command(name="generate")
 def generate() -> None:
-    """Generate a video using defaults and ENV/PROMPT; then upload to YouTube and Drive."""
+    """Generate a video using defaults and ENV/PROMPT. No uploads here."""
     _ensure_env_loaded()
     _validate_required_env()
     _ensure_prompt_default()
@@ -87,43 +88,17 @@ def generate() -> None:
         console.print("[red]OpenAI reports insufficient quota (429). Please check your OpenAI billing/funds: https://platform.openai.com/")
         raise typer.Exit(code=3)
     console.print(f"[green]Generated video: {result.video_path}")
-
-    # Default uploads
-    # 1) YouTube upload (private by default)
+    # Emit GitHub Actions outputs if available
     try:
-        title = sanitize_title(result.topic)
-        uploader = YouTubeUploader(
-            credentials_dir=Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))),
-            config=config,
-        )
-        metadata = UploadMetadata(
-            title=title,
-            description="",
-            tags=None,
-            category_id="22",
-            privacy_status=config.youtube_privacy_status,
-        )
-        video_id = uploader.upload_video(video_path=Path(result.video_path), metadata=metadata)
-        console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
-    except Exception as e:
-        console.print(f"[red]YouTube upload failed: {e}")
-        raise typer.Exit(code=4)
-
-    # 2) Google Drive upload (work directory and final MP4)
-    try:
-        basename = Path(result.video_path).stem
-        work_dir = output_dir / basename
-        parent_id = config.drive_parent_folder_id
-        drive = DriveUploader(
-            credentials_dir=Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))),
-            config=config,
-        )
-        folder_id = drive.upload_directory(work_dir, parent_folder_id=parent_id, make_shareable=True)
-        _ = drive.upload_file(Path(result.video_path), parent_folder_id=folder_id, make_shareable=True)
-        console.print(f"[green]Uploaded to Google Drive. Folder ID: {folder_id}")
-    except Exception as e:
-        console.print(f"[red]Drive upload failed: {e}")
-        raise typer.Exit(code=5)
+        github_output = os.getenv("GITHUB_OUTPUT")
+        if github_output:
+            basename = Path(result.video_path).stem
+            work_dir = output_dir / basename
+            with open(github_output, "a", encoding="utf-8") as fh:
+                fh.write(f"video_path={result.video_path}\n")
+                fh.write(f"work_dir={work_dir}\n")
+    except Exception:
+        pass
 
 
 @app.command(name="auth-youtube")
@@ -191,9 +166,113 @@ def auth_drive(
     token_path.write_text(creds.to_json())
     console.print(f"[green]Saved Drive OAuth token to: {token_path}")
 
+@app.command(name="upload-youtube")
+def upload_youtube(
+    video_path: str = typer.Argument(..., help="Path to the MP4 file to upload"),
+    title: Optional[str] = typer.Option(None, help="Video title. Defaults to file name"),
+    description: str = typer.Option("", help="Video description"),
+    privacy_status: Optional[str] = typer.Option(None, help="public | unlisted | private (defaults from config)"),
+    credentials_dir: str = typer.Option(
+        str(Path.cwd()),
+        help="Directory with OAuth creds (client_secret.json, youtube_token.json)",
+    ),
+) -> None:
+    """Upload a video to YouTube. Independent of generation."""
+    _ensure_env_loaded()
+
+    video = Path(video_path)
+    if not video.exists():
+        typer.secho(f"Video not found: {video}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    cfg = AppConfig()
+    resolved_title = title or video.stem
+    uploader = YouTubeUploader(credentials_dir=Path(credentials_dir), config=cfg)
+    metadata = UploadMetadata(
+        title=resolved_title,
+        description=description,
+        tags=None,
+        category_id="22",
+        privacy_status=privacy_status or cfg.youtube_privacy_status,
+    )
+    try:
+        video_id = uploader.upload_video(video_path=video, metadata=metadata)
+    except Exception as e:
+        console.print(f"[red]YouTube upload failed: {e}")
+        raise typer.Exit(code=4)
+    console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
+
+
+@app.command(name="upload-drive")
+def upload_drive(
+    video_path: str = typer.Argument(..., help="Path to the MP4 file to upload alongside its work dir"),
+    parent_folder_id: Optional[str] = typer.Option(None, help="Drive parent folder ID (defaults from config)"),
+    credentials_dir: str = typer.Option(
+        str(Path.cwd()),
+        help="Directory with OAuth creds (client_secret.json, drive_token.json)",
+    ),
+) -> None:
+    """Upload work directory and MP4 to Google Drive. Independent of generation."""
+    _ensure_env_loaded()
+
+    video = Path(video_path)
+    if not video.exists():
+        typer.secho(f"Video not found: {video}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    cfg = AppConfig()
+    output_dir = video.parent
+    basename = video.stem
+    work_dir = output_dir / basename
+    if not work_dir.exists() or not work_dir.is_dir():
+        typer.secho(f"Work directory does not exist: {work_dir}", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    resolved_parent = parent_folder_id or cfg.drive_parent_folder_id
+    drive = DriveUploader(credentials_dir=Path(credentials_dir), config=cfg)
+    try:
+        folder_id = drive.upload_directory(work_dir, parent_folder_id=resolved_parent, make_shareable=True)
+        _ = drive.upload_file(video, parent_folder_id=folder_id, make_shareable=True)
+    except Exception as e:
+        console.print(f"[red]Drive upload failed: {e}")
+        raise typer.Exit(code=5)
+    console.print(f"[green]Uploaded to Google Drive. Folder ID: {folder_id}")
+
+
+@app.command(name="upload-artifacts")
+def upload_artifacts(
+    outputs_dir: str = typer.Option("outputs", help="Directory containing generated outputs"),
+) -> None:
+    """Utility: emit artifact paths for CI (stdout and GITHUB_OUTPUT if present)."""
+    _ensure_env_loaded()
+    out_dir = Path(outputs_dir)
+    if not out_dir.exists():
+        typer.secho(f"Outputs directory not found: {out_dir}", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    # Collect mp4s (primary artifacts)
+    mp4s = sorted(out_dir.glob("*.mp4"))
+    if not mp4s:
+        typer.secho("No MP4 files found in outputs directory.", fg=typer.colors.RED)
+        raise typer.Exit(code=2)
+
+    # Print newline-separated list for ease of consumption
+    for p in mp4s:
+        console.print(str(p))
+
+    # Also emit to GITHUB_OUTPUT for downstream steps
+    try:
+        github_output = os.getenv("GITHUB_OUTPUT")
+        if github_output:
+            with open(github_output, "a", encoding="utf-8") as fh:
+                fh.write("artifact_paths=\n")
+                for p in mp4s:
+                    fh.write(f"{p}\n")
+    except Exception:
+        pass
 @app.command(name="generate-reaction")
 def generate_reaction() -> None:
-    """Generate from latest transcript of a default channel; no flags."""
+    """Generate from latest transcript of a default channel; no uploads here."""
     _ensure_env_loaded()
     _validate_required_env()
     if not os.getenv("RAPIDAPI_KEY"):
@@ -258,42 +337,17 @@ def generate_reaction() -> None:
     config = AppConfig()
     result = generate_video_pipeline(config=config, output_dir=output_dir)
     console.print(f"[green]Generated reaction video: {result.video_path}")
-
-    # Upload to YouTube
+    # Emit GitHub Actions outputs if available
     try:
-        title = sanitize_title(result.topic)
-        uploader = YouTubeUploader(
-            credentials_dir=Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))),
-            config=config,
-        )
-        metadata = UploadMetadata(
-            title=title,
-            description="",
-            tags=None,
-            category_id="22",
-            privacy_status=config.youtube_privacy_status,
-        )
-        video_id = uploader.upload_video(video_path=Path(result.video_path), metadata=metadata)
-        console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
-    except Exception as e:
-        console.print(f"[red]YouTube upload failed: {e}")
-        raise typer.Exit(code=4)
-
-    # Upload to Google Drive (work directory and final MP4)
-    try:
-        basename = Path(result.video_path).stem
-        work_dir = output_dir / basename
-        parent_id = config.drive_parent_folder_id
-        drive = DriveUploader(
-            credentials_dir=Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))),
-            config=config,
-        )
-        folder_id = drive.upload_directory(work_dir, parent_folder_id=parent_id, make_shareable=True)
-        _ = drive.upload_file(Path(result.video_path), parent_folder_id=folder_id, make_shareable=True)
-        console.print(f"[green]Uploaded to Google Drive. Folder ID: {folder_id}")
-    except Exception as e:
-        console.print(f"[red]Drive upload failed: {e}")
-        raise typer.Exit(code=5)
+        github_output = os.getenv("GITHUB_OUTPUT")
+        if github_output:
+            basename = Path(result.video_path).stem
+            work_dir = output_dir / basename
+            with open(github_output, "a", encoding="utf-8") as fh:
+                fh.write(f"video_path={result.video_path}\n")
+                fh.write(f"work_dir={work_dir}\n")
+    except Exception:
+        pass
 
 
 
