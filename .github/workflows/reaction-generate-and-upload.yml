@@ -20,6 +20,10 @@ jobs:
       OAUTH_CLIENT_JSON: ${{ secrets.OAUTH_CLIENT_JSON }}
       DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
       DRIVE_PARENT_FOLDER_ID: ${{ secrets.DRIVE_PARENT_FOLDER_ID }}
+      YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
+      DURATION_SECONDS: "60"
+      NUM_IMAGES: "6"
+      IMAGE_QUALITY: "medium"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,14 +48,8 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Run generator if new video detected (YouTube + Drive)
-        run: |
-          uv run --python 3.11 slop generate-from-channel-if-new \
-            --channel-handle "@SwaruuOficial" \
-            --credentials-dir ./.youtube \
-            --output-dir outputs \
-            --upload \
-            --drive-upload
+      - name: Generate reaction video from latest channel upload
+        run: uv run --python 3.11 slop generate-reaction
 
 
       - name: Upload artifact (latest video)

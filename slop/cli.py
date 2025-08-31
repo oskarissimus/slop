@@ -259,6 +259,42 @@ def generate_reaction() -> None:
     result = generate_video_pipeline(config=config, output_dir=output_dir)
     console.print(f"[green]Generated reaction video: {result.video_path}")
 
+    # Upload to YouTube
+    try:
+        title = sanitize_title(result.topic)
+        uploader = YouTubeUploader(
+            credentials_dir=Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))),
+            config=config,
+        )
+        metadata = UploadMetadata(
+            title=title,
+            description="",
+            tags=None,
+            category_id="22",
+            privacy_status=config.youtube_privacy_status,
+        )
+        video_id = uploader.upload_video(video_path=Path(result.video_path), metadata=metadata)
+        console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
+    except Exception as e:
+        console.print(f"[red]YouTube upload failed: {e}")
+        raise typer.Exit(code=4)
+
+    # Upload to Google Drive (work directory and final MP4)
+    try:
+        basename = Path(result.video_path).stem
+        work_dir = output_dir / basename
+        parent_id = config.drive_parent_folder_id
+        drive = DriveUploader(
+            credentials_dir=Path(os.getenv("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))),
+            config=config,
+        )
+        folder_id = drive.upload_directory(work_dir, parent_folder_id=parent_id, make_shareable=True)
+        _ = drive.upload_file(Path(result.video_path), parent_folder_id=folder_id, make_shareable=True)
+        console.print(f"[green]Uploaded to Google Drive. Folder ID: {folder_id}")
+    except Exception as e:
+        console.print(f"[red]Drive upload failed: {e}")
+        raise typer.Exit(code=5)
+
 
 
 
