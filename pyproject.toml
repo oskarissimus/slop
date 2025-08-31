@@ -25,7 +25,6 @@ dependencies = [
 
 [project.scripts]
 slop = "slop.cli:app"
-slop-youtube = "slop.youtube_cli:app"
 
 [tool.uv]
 package = true
