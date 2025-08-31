@@ -187,7 +187,18 @@ def upload_youtube(
         raise typer.Exit(code=1)
 
     cfg = YouTubeUploadConfig()
-    resolved_title = title or video.stem
+    # Derive title: CLI flag > title.txt in work dir > file stem
+    resolved_title = title
+    if not resolved_title:
+        work_dir = video.parent / video.stem
+        title_path = work_dir / "title.txt"
+        if title_path.exists():
+            try:
+                resolved_title = title_path.read_text(encoding="utf-8").strip() or None
+            except Exception:
+                resolved_title = None
+    if not resolved_title:
+        resolved_title = video.stem
     uploader = YouTubeUploader(credentials_dir=Path(credentials_dir), config=cfg)
     metadata = UploadMetadata(
         title=resolved_title,
