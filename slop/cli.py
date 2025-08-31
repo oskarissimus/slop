@@ -18,6 +18,7 @@ from .utils import InsufficientOpenAIFundsError, sanitize_title
 from .youtube_monitor import check_for_new_video_and_get_transcript, YouTubePublicMonitor, parse_published_at_iso8601
 from .youtube_uploader import YouTubeUploader, UploadMetadata, YOUTUBE_UPLOAD_SCOPES
 from .drive_uploader import DriveUploader, DRIVE_SCOPES
+from .uploader_config import YouTubeUploadConfig, DriveUploadConfig
 
 
 console = Console()
@@ -110,7 +111,7 @@ def auth_youtube(
 ) -> None:
     """Interactive OAuth flow to create/update YouTube token file."""
     _ensure_env_loaded()
-    config = AppConfig()
+    config = YouTubeUploadConfig()
 
     cred_dir = Path(credentials_dir)
     cred_dir.mkdir(parents=True, exist_ok=True)
@@ -143,7 +144,7 @@ def auth_drive(
 ) -> None:
     """Interactive OAuth flow to create/update Google Drive token file."""
     _ensure_env_loaded()
-    config = AppConfig()
+    config = DriveUploadConfig()
 
     cred_dir = Path(credentials_dir)
     cred_dir.mkdir(parents=True, exist_ok=True)
@@ -185,7 +186,7 @@ def upload_youtube(
         typer.secho(f"Video not found: {video}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    cfg = AppConfig()
+    cfg = YouTubeUploadConfig()
     resolved_title = title or video.stem
     uploader = YouTubeUploader(credentials_dir=Path(credentials_dir), config=cfg)
     metadata = UploadMetadata(
@@ -220,7 +221,7 @@ def upload_drive(
         typer.secho(f"Video not found: {video}", fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
-    cfg = AppConfig()
+    cfg = DriveUploadConfig()
     output_dir = video.parent
     basename = video.stem
     work_dir = output_dir / basename
@@ -229,6 +230,10 @@ def upload_drive(
         raise typer.Exit(code=2)
 
     resolved_parent = parent_folder_id or cfg.drive_parent_folder_id
+    if not resolved_parent:
+        typer.secho("Drive parent folder ID is required (provide flag or set in env).", fg=typer.colors.RED)
+        raise typer.Exit(code=3)
+
     drive = DriveUploader(credentials_dir=Path(credentials_dir), config=cfg)
     try:
         folder_id = drive.upload_directory(work_dir, parent_folder_id=resolved_parent, make_shareable=True)
@@ -270,6 +275,8 @@ def upload_artifacts(
                     fh.write(f"{p}\n")
     except Exception:
         pass
+
+
 @app.command(name="generate-reaction")
 def generate_reaction() -> None:
     """Generate from latest transcript of a default channel; no uploads here."""

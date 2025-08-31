@@ -14,7 +14,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-from .config import AppConfig
+from pydantic_settings import BaseSettings
 
 YOUTUBE_UPLOAD_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
@@ -32,7 +32,7 @@ class UploadMetadata:
 
 
 class YouTubeUploader:
-    def __init__(self, credentials_dir: Path, config: AppConfig | None = None) -> None:
+    def __init__(self, credentials_dir: Path, config: BaseSettings | None = None) -> None:
         self.credentials_dir = credentials_dir
         self.credentials_dir.mkdir(parents=True, exist_ok=True)
         self.client_secret_path = self.credentials_dir / "client_secret.json"

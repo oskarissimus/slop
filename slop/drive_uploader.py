@@ -12,7 +12,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-from .config import AppConfig
+from pydantic_settings import BaseSettings
 
 DRIVE_SCOPES = [
     "https://www.googleapis.com/auth/drive.file",  # App-created or opened files
@@ -26,7 +26,7 @@ class DriveUploadResult:
 
 
 class DriveUploader:
-    def __init__(self, credentials_dir: Path, config: AppConfig | None = None) -> None:
+    def __init__(self, credentials_dir: Path, config: BaseSettings | None = None) -> None:
         self.credentials_dir = Path(credentials_dir)
         self.credentials_dir.mkdir(parents=True, exist_ok=True)
         # Use separate token filename for Drive to avoid conflicts
