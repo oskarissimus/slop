@@ -44,14 +44,8 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Run generator if new video detected (YouTube + Drive)
-        run: |
-          uv run --python 3.11 slop generate-from-channel-if-new \
-            --channel-handle "@SwaruuOficial" \
-            --credentials-dir ./.youtube \
-            --output-dir outputs \
-            --upload \
-            --drive-upload
+      - name: Generate reaction video from latest channel upload
+        run: uv run --python 3.11 slop generate-reaction
 
 
       - name: Upload artifact (latest video)
