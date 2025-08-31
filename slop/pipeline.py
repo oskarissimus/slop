@@ -71,6 +71,12 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
     except Exception:
         pass
 
+    # Persist the intended title for downstream upload steps
+    try:
+        (work_dir / "title.txt").write_text(topic, encoding="utf-8")
+    except Exception:
+        pass
+
     # 3) Prepare image prompts and narration script
     image_prompts = [s.image_description for s in scenes]
     script_text = " ".join(s.script for s in scenes).strip()
