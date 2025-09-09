@@ -12,7 +12,11 @@ from .config import AppConfig
 from .utils import sanitize_title
 from .scriptgen import generate_topic_and_scenes
 from .images import generate_images, generate_images_async
-from .voice import synthesize_voice_with_alignment, synthesize_voice_with_alignment_async
+from .voice import (
+    synthesize_voice_with_alignment,
+    synthesize_voice_with_alignment_async,
+    synthesize_voice_with_alignment_chunked_async,
+)
 from .stitch import stitch_video
 
 
@@ -83,7 +87,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
 
     # 4 & 5) Generate images and synthesize audio concurrently
     logger.info("[pipeline] starting parallel image+audio generation")
-    async def run_parallel() -> tuple[list[Path], Path, object]:
+    async def run_parallel() -> tuple[list[Path], Path, object, list[float]]:
         images_task = generate_images_async(
             image_prompts=image_prompts,
             num_images=config.num_images,
@@ -92,22 +96,24 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
             image_size=f"{config.resolution_width}x{config.resolution_height}",
             image_quality=config.image_quality,
         )
-        tts_task = synthesize_voice_with_alignment_async(
-            text=script_text,
+        tts_task = synthesize_voice_with_alignment_chunked_async(
+            scenes=scenes,
             voice_id=config.voice_id,
             output_dir=work_dir,
             model_id=config.tts_model_id,
             output_format=config.tts_output_format,
+            concurrency=max(1, int(getattr(config, "tts_concurrency", 4))),
             stability=config.stability,
             similarity_boost=config.similarity_boost,
             style=config.style,
             use_speaker_boost=config.use_speaker_boost,
             speed=config.speed,
+            api_key=getattr(config, "elevenlabs_api_key", None),
         )
-        image_paths, (audio_path, alignment) = await asyncio.gather(images_task, tts_task)
-        return image_paths, audio_path, alignment
+        image_paths, (audio_path, durations_by_scene) = await asyncio.gather(images_task, tts_task)
+        return image_paths, audio_path, None, durations_by_scene
 
-    image_paths, audio_path, alignment = asyncio.run(run_parallel())
+    image_paths, audio_path, alignment, durations_by_scene = asyncio.run(run_parallel())
     logger.info(
         "[pipeline] finished image+audio | images=%d audio=%s",
         len(image_paths),
@@ -125,6 +131,7 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
         fps=config.fps,
         alignment=alignment,
         scenes=scenes,
+        durations_by_scene=durations_by_scene,
     )
 
     logger.info("[pipeline] done | output=%s topic=\"%s\"", str(video_path), topic)

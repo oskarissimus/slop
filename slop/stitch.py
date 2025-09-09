@@ -53,9 +53,10 @@ def stitch_video(
     height: int,
     fps: int,
     *,
-    alignment: CharacterAlignmentResponseModel,
+    alignment: Optional[CharacterAlignmentResponseModel] = None,
     scenes: Optional[List[Scene]] = None,
     show_clock: bool = False,
+    durations_by_scene: Optional[List[float]] = None,
 ):
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -88,10 +89,18 @@ def stitch_video(
     logger.info("[stitch] probed audio duration | seconds=%.3f", audio_duration)
 
     # Compute per-image durations from alignment by scenes
-    scenes_start_times = calculate_scenes_start_times(alignment, scenes)
-    durations = [scenes_start_times[i+1] - scenes_start_times[i] for i in range(len(scenes_start_times)-1)]
-    durations.append(audio_duration - scenes_start_times[-1])
-    logger.info("[stitch] computed durations | durations=%s", durations)
+    if durations_by_scene is not None:
+        if len(durations_by_scene) != total_images:
+            raise ValueError("durations_by_scene length must match number of images")
+        durations = list(durations_by_scene)
+        logger.info("[stitch] using provided durations_by_scene | durations=%s", durations)
+    else:
+        if alignment is None:
+            raise ValueError("alignment or durations_by_scene must be provided")
+        scenes_start_times = calculate_scenes_start_times(alignment, scenes)
+        durations = [scenes_start_times[i+1] - scenes_start_times[i] for i in range(len(scenes_start_times)-1)]
+        durations.append(audio_duration - scenes_start_times[-1])
+        logger.info("[stitch] computed durations from alignment | durations=%s", durations)
 
 
     # Save images.txt to disk in the same directory as the output video

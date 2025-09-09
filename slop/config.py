@@ -34,6 +34,8 @@ class AppConfig(BaseSettings):
     image_quality: Literal["low", "medium", "high"] = "low"
     tts_model_id: str = "eleven_v3"
     tts_output_format: str = "mp3_44100_128"
+    # Concurrency for async ElevenLabs TTS chunking
+    tts_concurrency: int = 4
 
     # YouTube upload visibility
     youtube_privacy_status: Literal["public", "unlisted", "private"] = "private"
