@@ -5,6 +5,8 @@ import os
 from typing import Dict, Any, Tuple, Optional, List
 import base64
 import logging
+import subprocess
+import shutil
 
 from elevenlabs.client import ElevenLabs
 from elevenlabs.types.audio_with_timestamps_response import AudioWithTimestampsResponse
@@ -13,7 +15,7 @@ from elevenlabs.types.voice_settings import VoiceSettings
 
 import asyncio
 from typing import Tuple as _Tuple
-import subprocess
+ 
 
 
 logger = logging.getLogger(__name__)
@@ -294,6 +296,14 @@ async def synthesize_voice_with_alignment_chunked_async(
 
     client = AsyncElevenLabs(api_key=api_key) if api_key else AsyncElevenLabs()  # type: ignore
 
+    # Guard: Some models don't support previous_text/next_text
+    unsupported_models = {"eleven_v3"}
+    if model_id in unsupported_models:
+        raise RuntimeError(
+            f"Model '{model_id}' does not support previous_text/next_text for convert_with_timestamps. "
+            "Use a context-enabled model like 'eleven_turbo_v2'."
+        )
+
     # Build base voice settings once
     requested_settings: Dict[str, Any] = {}
     if stability is not None:
@@ -369,19 +379,25 @@ async def synthesize_voice_with_alignment_chunked_async(
             with open(out_path, "wb") as f:
                 f.write(audio_bytes)
 
-            # Probe duration with ffprobe
-            probe_cmd = [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                str(out_path),
-            ]
-            result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
-            duration = float((result.stdout or "0").strip() or 0.0)
+            # Compute duration from alignment end time (avoid ffprobe dependency)
+            duration = 0.0
+            align_obj = getattr(response, "alignment", None)
+            if align_obj is None and isinstance(response, dict):
+                align_obj = response.get("alignment")
+            if align_obj is None:
+                align_obj = getattr(response, "normalized_alignment", None)
+                if align_obj is None and isinstance(response, dict):
+                    align_obj = response.get("normalized_alignment")
+            try:
+                end_times = None
+                if hasattr(align_obj, "character_end_times_seconds"):
+                    end_times = getattr(align_obj, "character_end_times_seconds")
+                elif isinstance(align_obj, dict):
+                    end_times = align_obj.get("character_end_times_seconds")
+                if end_times and len(end_times) > 0:
+                    duration = float(end_times[-1])
+            except Exception:
+                duration = 0.0
             logger.info(
                 "[tts/async/chunked] saved | i=%d path=%s bytes=%d duration=%.3f",
                 index,
@@ -407,6 +423,10 @@ async def synthesize_voice_with_alignment_chunked_async(
         for p in ordered_paths:
             fh.write(f"file {p.resolve()}\n")
 
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError(
+            "ffmpeg is required to concatenate audio chunks. Please install ffmpeg or make it available in PATH."
+        )
     concat_cmd = [
         "ffmpeg",
         "-y",
