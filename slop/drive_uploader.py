@@ -171,17 +171,32 @@ class DriveUploader:
         return DriveUploadResult(file_id=str(file_id), web_view_link=str(web_link) if web_link else None)
 
     def upload_directory(self, dir_path: Path, *, parent_folder_id: Optional[str] = None, make_shareable: bool = True) -> str:
-        """Create a folder on Drive and upload all files from dir_path into it (non-recursive)."""
+        """Create a folder on Drive and upload all files from dir_path into it, recursively including subfolders.
+
+        This ensures per-scene audio chunks under subdirectories (e.g. `audio_chunks/`) are preserved on Drive.
+        """
         if not dir_path.exists() or not dir_path.is_dir():
             raise FileNotFoundError(f"Directory not found: {dir_path}")
-        folder_id = self.create_folder(dir_path.name, parent_folder_id=parent_folder_id, make_shareable=make_shareable)
-        for item in sorted(dir_path.iterdir()):
-            if item.is_file():
+
+        def _upload_tree(local_dir: Path, drive_parent_id: Optional[str]) -> str:
+            current_folder_id = self.create_folder(local_dir.name, parent_folder_id=drive_parent_id, make_shareable=make_shareable)
+            # Upload files in this directory
+            for item in sorted(local_dir.iterdir()):
+                if item.is_file():
+                    try:
+                        self.upload_file(item, parent_folder_id=current_folder_id, make_shareable=make_shareable)
+                    except Exception:
+                        # Continue best-effort even if one file fails
+                        pass
+            # Recurse into subdirectories
+            for sub in sorted(p for p in local_dir.iterdir() if p.is_dir()):
                 try:
-                    self.upload_file(item, parent_folder_id=folder_id, make_shareable=make_shareable)
+                    _upload_tree(sub, current_folder_id)
                 except Exception:
-                    # Continue best-effort even if one file fails
+                    # Continue best-effort even if one folder fails
                     pass
-        return folder_id
+            return current_folder_id
+
+        return _upload_tree(dir_path, parent_folder_id)
 
 
