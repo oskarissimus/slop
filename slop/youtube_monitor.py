@@ -290,12 +290,13 @@ def check_for_new_video_and_get_transcript(
     channel_handle_or_id: str,
     credentials_dir: Path,
     preferred_languages: Optional[list[str]] = None,
-    freshness_hours: int = 24,
+    freshness_days: int = 1,
     max_candidates: int = 5,
     use_generated_fallback: bool = True,
 ) -> Optional[tuple[str, str]]:
-    """If a recent video (within freshness_hours) has a transcript, return (video_id, transcript).
-    Checks up to max_candidates newest videos, instead of only the very latest.
+    """If a video uploaded within the last N days (excluding today) has a transcript,
+    return (video_id, transcript). Checks up to max_candidates newest videos.
+    N is given by freshness_days (default 1 == "yesterday").
     """
     monitor = YouTubePublicMonitor(credentials_dir=credentials_dir)
     channel_id = monitor.resolve_channel_id(channel_handle_or_id)
@@ -310,13 +311,16 @@ def check_for_new_video_and_get_transcript(
         recent_videos = [latest] if latest else []
 
     now = datetime.now(timezone.utc)
+    today_utc = now.date()
+    allowed_dates = { (today_utc - timedelta(days=offset)) for offset in range(1, max(1, freshness_days) + 1) }
     for vid in recent_videos:
         if not vid or not vid.video_id:
             continue
         published_dt = parse_published_at_iso8601(vid.published_at)
         if not published_dt:
             continue
-        if now - published_dt > timedelta(hours=freshness_hours):
+        pub_date_utc = published_dt.astimezone(timezone.utc).date()
+        if pub_date_utc not in allowed_dates:
             continue
         transcript = fetch_transcript_text(vid.video_id, preferred_languages=preferred_languages, use_generated_fallback=use_generated_fallback)
         if transcript:
