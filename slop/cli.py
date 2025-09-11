@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import typer
@@ -317,18 +317,21 @@ def generate_reaction() -> None:
             )
             if videos:
                 now = datetime.now(timezone.utc)
-                freshest_age = None
-                for v in videos:
+                console.print("[cyan]Last 5 uploads (title | published_at | fresh<24h):")
+                for idx, v in enumerate(videos, start=1):
                     pub_dt = parse_published_at_iso8601(v.published_at)
-                    if not pub_dt:
-                        continue
-                    age = now - pub_dt
-                    if freshest_age is None or age < freshest_age:
-                        freshest_age = age
+                    is_fresh = False
+                    pub_str = v.published_at
+                    if pub_dt:
+                        is_fresh = (now - pub_dt) <= timedelta(hours=freshness_hours)
+                        pub_str = pub_dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z")
+                    console.print(f"  {idx}. {v.title} | {pub_str} | {is_fresh}")
+            else:
+                console.print("[yellow]No videos returned from API.")
         else:
             console.print("[yellow]Could not resolve channel id; continuing.")
-    except Exception:
-        pass
+    except Exception as e:
+        console.print(f"[yellow]Failed to list recent videos for debugging: {e}")
 
     try:
         res = check_for_new_video_and_get_transcript(
