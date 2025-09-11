@@ -301,7 +301,7 @@ def generate_reaction() -> None:
 
     # Defaults (no user-provided flags)
     channel_handle = "@SwaruuOficial"
-    freshness_hours = 24
+    freshness_days = 1
     max_candidates = 5
 
     credentials_path = Path.cwd()
@@ -313,17 +313,19 @@ def generate_reaction() -> None:
         if channel_id:
             videos = monitor.fetch_recent_videos(channel_id, max_results=max_candidates)
             console.print(
-                f"[cyan]Search: channel_id={channel_id} | candidates={len(videos)} | freshness_threshold={freshness_hours}h"
+                f"[cyan]Search: channel_id={channel_id} | candidates={len(videos)} | freshness_window_days={freshness_days}"
             )
             if videos:
                 now = datetime.now(timezone.utc)
-                console.print("[cyan]Last 5 uploads (title | published_at | fresh<24h):")
+                today_utc = now.date()
+                allowed_dates = { (today_utc - timedelta(days=offset)) for offset in range(1, max(1, freshness_days) + 1) }
+                console.print("[cyan]Last 5 uploads (title | published_at | fresh_yesterday):")
                 for idx, v in enumerate(videos, start=1):
                     pub_dt = parse_published_at_iso8601(v.published_at)
                     is_fresh = False
                     pub_str = v.published_at
                     if pub_dt:
-                        is_fresh = (now - pub_dt) <= timedelta(hours=freshness_hours)
+                        is_fresh = pub_dt.astimezone(timezone.utc).date() in allowed_dates
                         pub_str = pub_dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z")
                     console.print(f"  {idx}. {v.title} | {pub_str} | {is_fresh}")
             else:
@@ -338,7 +340,7 @@ def generate_reaction() -> None:
             channel_handle_or_id=channel_handle,
             credentials_dir=credentials_path,
             preferred_languages=None,
-            freshness_hours=freshness_hours,
+            freshness_days=freshness_days,
             max_candidates=max_candidates,
             use_generated_fallback=True,
         )
