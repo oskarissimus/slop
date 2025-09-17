@@ -17,9 +17,9 @@ class AppConfig(BaseSettings):
     # ElevenLabs voice settings (Optional so they can be omitted if None)
     stability: Optional[float] = 0.5
     similarity_boost: Optional[float] = None
-    style: Optional[float] = 0.34
+    style: Optional[float] = 0.28
     use_speaker_boost: Optional[bool] = True
-    speed: Optional[float] = None
+    speed: Optional[float] = 1.15
     #d4Z5Fvjohw3zxGpV8XUV - Maria float = 0.34
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
