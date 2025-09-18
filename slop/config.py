@@ -8,19 +8,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 
-    duration_seconds: int = 330
+    duration_seconds: int = 240
     fps: int = 24
     resolution_width: int = 1024
     resolution_height: int = 1536
-    num_images: int = 33
-    voice_id: str = "d4Z5Fvjohw3zxGpV8XUV"
+    num_images: int = 24
+    voice_id: str = "Bx2lBwIZJBilRBVc3AGO"
     # ElevenLabs voice settings (Optional so they can be omitted if None)
-    stability: Optional[float] = 0.7
+    stability: Optional[float] = None
     similarity_boost: Optional[float] = None
-    style: Optional[float] = 0.28
+    style: Optional[float] = None
     use_speaker_boost: Optional[bool] = True
     speed: Optional[float] = 1.15
-    #d4Z5Fvjohw3zxGpV8XUV - Maria float = 0.34
+    #d4Z5Fvjohw3zxGpV8XUV - Maria style = 0.34
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
     #pNInz6obpgDQGcFmaJgB - sarmata
