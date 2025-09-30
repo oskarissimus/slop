@@ -13,13 +13,13 @@ class AppConfig(BaseSettings):
     resolution_width: int = 1024
     resolution_height: int = 1536
     num_images: int = 24
-    voice_id: str = "Bx2lBwIZJBilRBVc3AGO"
+    voice_id: str = "d4Z5Fvjohw3zxGpV8XUV"
     # ElevenLabs voice settings (Optional so they can be omitted if None)
-    stability: Optional[float] = None
+    stability: Optional[float] = 0.7
     similarity_boost: Optional[float] = None
-    style: Optional[float] = None
+    style: Optional[float] = 0.3
     use_speaker_boost: Optional[bool] = True
-    speed: Optional[float] = None
+    speed: Optional[float] = 1.15
     #d4Z5Fvjohw3zxGpV8XUV - Maria style = 0.34 stability 0.7 speed 1.15
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
