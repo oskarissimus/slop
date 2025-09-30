@@ -1,0 +1,38 @@
+name: generate-scenes
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: generate-scenes
+  cancel-in-progress: false
+
+jobs:
+  generate_scenes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install Python 3.11 via uv
+        run: uv python install 3.11
+
+      - name: Install ffmpeg (not strictly needed here but keeps env consistent)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Generate scenes JSON
+        run: uv run --python 3.11 slop generate-scenes
+
+      - name: Upload scenes.json artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scenes
+          path: scenes.json
+          if-no-files-found: error
+
