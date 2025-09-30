@@ -6,9 +6,10 @@ Setup
 - Install with uv: `uv sync`
 
 CLI
-- `slop run-once` generates a single 2-min video now
-- Options: `--prompt "opis tematu"` to pass manual topic
-- If neither `--prompt` nor `--prompt-file` is provided, `./prompt.txt` is auto-read (if present)
+- `slop generate` generates a single ~2-min video now (reads `./prompt.txt` if present)
+- `slop generate-scenes` generates only a scenes JSON into `./scenes.json` (uses `./prompt.txt` if present)
+- `slop render-from-scenes` renders a full video using `./scenes.json`
+- Special mode: include the phrase "business as usual" in the prompt (or in `prompt.txt`) to fetch recent YouTube uploads with views, likes, and comments and feed a summary to the LLM to propose a new topic aimed at maximizing engagement
 - Special mode: include the phrase "business as usual" in the prompt (or in `prompt.txt`) to fetch recent YouTube uploads with views, likes, and comments and feed a summary to the LLM to propose a new topic aimed at maximizing engagement
 
 Environment
