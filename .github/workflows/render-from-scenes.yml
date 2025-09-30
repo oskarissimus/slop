@@ -1,0 +1,39 @@
+name: render-from-scenes
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: render-from-scenes
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install Python 3.11 via uv
+        run: uv python install 3.11
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Render video from scenes.json
+        run: uv run --python 3.11 slop render-from-scenes
+
+      - name: Upload outputs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: outputs
+          path: outputs/**
+          if-no-files-found: error
+

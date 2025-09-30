@@ -41,7 +41,7 @@ class AppConfig(BaseSettings):
     youtube_privacy_status: Literal["public", "unlisted", "private"] = "private"
 
     openai_api_key: str
-    elevenlabs_api_key: str
+    elevenlabs_api_key: Optional[str] = None
     drive_parent_folder_id: Optional[str] = None
 
     # OAuth credentials (single-source fields, optional)
