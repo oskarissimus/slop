@@ -207,6 +207,54 @@ def render_from_scenes() -> None:
     result = render_video_from_scenes(config=cfg, scenes=list(scenario.scenes), output_dir=output_dir, topic=None)
     console.print(f"[green]Rendered video: {result.video_path}")
 
+    # After rendering, also upload to Google Drive and YouTube (fail fast if misconfigured)
+    video = Path(result.video_path)
+    basename = video.stem
+    work_dir = output_dir / basename
+
+    # Upload to Google Drive (work directory + MP4)
+    try:
+        resolved_parent = getattr(cfg, "drive_parent_folder_id", None)
+        if not resolved_parent:
+            typer.secho("Drive parent folder ID is required for Drive upload (set drive_parent_folder_id in .env).", fg=typer.colors.RED)
+            raise typer.Exit(code=4)
+        drive = DriveUploader(credentials_dir=Path.cwd(), config=cfg)
+        folder_id = drive.upload_directory(work_dir, parent_folder_id=resolved_parent, make_shareable=True)
+        _ = drive.upload_file(video, parent_folder_id=folder_id, make_shareable=True)
+        console.print(f"[green]Uploaded to Google Drive. Folder ID: {folder_id}")
+    except typer.Exit:
+        raise
+    except Exception as e:
+        console.print(f"[red]Drive upload failed: {e}")
+        raise typer.Exit(code=5)
+
+    # Upload to YouTube
+    try:
+        # Derive title from work_dir/title.txt if present, else file stem
+        resolved_title = None
+        title_path = work_dir / "title.txt"
+        if title_path.exists():
+            try:
+                resolved_title = title_path.read_text(encoding="utf-8").strip() or None
+            except Exception:
+                resolved_title = None
+        if not resolved_title:
+            resolved_title = basename
+
+        uploader = YouTubeUploader(credentials_dir=Path.cwd(), config=cfg)
+        metadata = UploadMetadata(
+            title=resolved_title,
+            description="",
+            tags=None,
+            category_id="22",
+            privacy_status=cfg.youtube_privacy_status,
+        )
+        video_id = uploader.upload_video(video_path=video, metadata=metadata)
+        console.print(f"[green]Uploaded to YouTube. Video ID: {video_id}")
+    except Exception as e:
+        console.print(f"[red]YouTube upload failed: {e}")
+        raise typer.Exit(code=6)
+
     # Emit GitHub Actions outputs if available
     try:
         github_output = os.getenv("GITHUB_OUTPUT")
