@@ -13,7 +13,7 @@ class AppConfig(BaseSettings):
     resolution_width: int = 1024
     resolution_height: int = 1536
     num_images: int = 24
-    voice_id: str = "d4Z5Fvjohw3zxGpV8XUV"
+    voice_id: str = "pNInz6obpgDQGcFmaJgB"
     # ElevenLabs voice settings (Optional so they can be omitted if None)
     stability: Optional[float] = 0.7
     similarity_boost: Optional[float] = None
