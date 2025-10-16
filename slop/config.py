@@ -19,7 +19,7 @@ class AppConfig(BaseSettings):
     similarity_boost: Optional[float] = None
     style: Optional[float] = None
     use_speaker_boost: Optional[bool] = True
-    speed: Optional[float] = None
+    speed: Optional[float] = 1.1
     #d4Z5Fvjohw3zxGpV8XUV - Maria style = 0.34 stability 0.7 speed 1.15
     #olRVHO9SSe7gI7wwlL9o - rachel
     #21m00Tcm4TlvDq8ikWAM - poeta
