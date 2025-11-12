@@ -8,7 +8,7 @@ import json
 import asyncio
 import logging
 
-from .config import AppConfig
+from .config import AppConfig, LLMProvider
 from .utils import sanitize_title
 from .scriptgen import generate_topic_and_scenes
 from .images import generate_images, generate_images_async
@@ -54,12 +54,15 @@ def generate_video_pipeline(config: AppConfig, output_dir: Path) -> GeneratedVid
     num_scenes = max(1, config.num_images)
     user_input = prompt_raw.strip() if prompt_raw else ""
     logger.info("[pipeline] generating topic and scenes | words_target≈%d scenes=%d", int(config.duration_seconds * 2.5), num_scenes)
+    api_key = config.deepseek_api_key if config.llm_provider == LLMProvider.DEEPSEEK else config.openai_api_key
     topic, scenes = generate_topic_and_scenes(
         input_text=user_input,
         target_duration_seconds=config.duration_seconds,
         num_scenes=num_scenes,
         model=config.chat_model,
         temperature=config.temperature,
+        provider=config.llm_provider,
+        api_key=api_key,
     )
     logger.info("[pipeline] got topic and scenes | topic=\"%s\" scenes=%d", topic, len(scenes))
     topic = sanitize_title(topic)

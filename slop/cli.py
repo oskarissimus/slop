@@ -12,7 +12,7 @@ from rich.console import Console
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from .config import AppConfig
+from .config import AppConfig, LLMProvider
 from .pipeline import generate_video_pipeline
 from .pipeline import render_video_from_scenes
 from .utils import InsufficientOpenAIFundsError, sanitize_title
@@ -44,8 +44,18 @@ def _ensure_env_loaded() -> None:
 
 def _validate_required_env() -> None:
     missing = []
-    if not os.getenv("OPENAI_API_KEY"):
-        missing.append("OPENAI_API_KEY")
+    try:
+        cfg = AppConfig()
+        if cfg.llm_provider == LLMProvider.DEEPSEEK:
+            if not cfg.deepseek_api_key:
+                missing.append("DEEPSEEK_API_KEY")
+        else:
+            if not cfg.openai_api_key:
+                missing.append("OPENAI_API_KEY")
+    except Exception:
+        # If config loading fails, check env vars directly
+        if not os.getenv("OPENAI_API_KEY") and not os.getenv("DEEPSEEK_API_KEY"):
+            missing.append("OPENAI_API_KEY or DEEPSEEK_API_KEY")
     if not os.getenv("ELEVENLABS_API_KEY"):
         missing.append("ELEVENLABS_API_KEY")
     if missing:
@@ -58,31 +68,41 @@ def _validate_required_env() -> None:
 
 
 def _require_openai() -> AppConfig:
-    """Load settings and ensure only OpenAI key is present (for scenes generation)."""
+    """Load settings and ensure LLM API key is present (for scenes generation)."""
     try:
         cfg = AppConfig()
     except Exception:
-        typer.secho("Missing required env var: OPENAI_API_KEY (set in .env)", fg=typer.colors.RED)
+        typer.secho("Missing required env var: OPENAI_API_KEY or DEEPSEEK_API_KEY (set in .env)", fg=typer.colors.RED)
         raise typer.Exit(code=1)
-    if not getattr(cfg, "openai_api_key", None):
-        typer.secho("Missing required env var: OPENAI_API_KEY (set in .env)", fg=typer.colors.RED)
-        raise typer.Exit(code=1)
+    if cfg.llm_provider == LLMProvider.DEEPSEEK:
+        if not getattr(cfg, "deepseek_api_key", None):
+            typer.secho("Missing required env var: DEEPSEEK_API_KEY (set in .env)", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
+    else:
+        if not getattr(cfg, "openai_api_key", None):
+            typer.secho("Missing required env var: OPENAI_API_KEY (set in .env)", fg=typer.colors.RED)
+            raise typer.Exit(code=1)
     return cfg
 
 
 def _require_openai_and_elevenlabs() -> AppConfig:
-    """Load settings and ensure both OpenAI and ElevenLabs keys are present."""
+    """Load settings and ensure both LLM and ElevenLabs keys are present."""
     try:
         cfg = AppConfig()
     except Exception:
+        llm_key = "DEEPSEEK_API_KEY" if os.getenv("LLM_PROVIDER") == "deepseek" else "OPENAI_API_KEY"
         typer.secho(
-            "Missing required env vars: OPENAI_API_KEY and ELEVENLABS_API_KEY (set in .env)",
+            f"Missing required env vars: {llm_key} and ELEVENLABS_API_KEY (set in .env)",
             fg=typer.colors.RED,
         )
         raise typer.Exit(code=1)
     missing = []
-    if not getattr(cfg, "openai_api_key", None):
-        missing.append("OPENAI_API_KEY")
+    if cfg.llm_provider == LLMProvider.DEEPSEEK:
+        if not getattr(cfg, "deepseek_api_key", None):
+            missing.append("DEEPSEEK_API_KEY")
+    else:
+        if not getattr(cfg, "openai_api_key", None):
+            missing.append("OPENAI_API_KEY")
     if not getattr(cfg, "elevenlabs_api_key", None):
         missing.append("ELEVENLABS_API_KEY")
     if missing:
@@ -159,12 +179,15 @@ def generate_scenes() -> None:
     os.environ.setdefault("YOUTUBE_CREDENTIALS_DIR", str(Path.cwd()))
 
     num_scenes = max(1, cfg.num_images)
+    api_key = cfg.deepseek_api_key if cfg.llm_provider == LLMProvider.DEEPSEEK else cfg.openai_api_key
     topic, scenes = generate_topic_and_scenes(
         input_text=input_text,
         target_duration_seconds=cfg.duration_seconds,
         num_scenes=num_scenes,
         model=cfg.chat_model,
         temperature=cfg.temperature,
+        provider=cfg.llm_provider,
+        api_key=api_key,
     )
 
     # Persist only scenes to repo root

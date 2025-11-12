@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 import json
 import os
 from pathlib import Path
@@ -10,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 from openai import OpenAI, RateLimitError
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
+from .config import LLMProvider, OpenAIModel, DeepSeekModel
 from .prompts import (
     COMBINED_GENERATION_SYSTEM_MESSAGE,
     get_combined_generation_user_prompt,
@@ -45,17 +46,34 @@ def generate_topic_and_scenes(
     input_text: Optional[str],
     target_duration_seconds: int,
     num_scenes: int,
-    model: str = "gpt-4o-mini",
+    model: Union[OpenAIModel, DeepSeekModel] = OpenAIModel.GPT_4O_MINI,
     temperature: float = 0.7,
+    provider: LLMProvider = LLMProvider.OPENAI,
+    api_key: Optional[str] = None,
 ) -> Tuple[str, List[Scene]]:
     """Generate both a topic and structured scenes in a single model call.
 
     Returns (topic, scenes).
     """
-    client = OpenAI()
+    if provider == LLMProvider.DEEPSEEK:
+        if not api_key:
+            raise ValueError("deepseek_api_key is required when provider is 'deepseek'")
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://api.deepseek.com",
+        )
+    elif provider == LLMProvider.OPENAI:
+        client = OpenAI(api_key=api_key) if api_key else OpenAI()
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
+    
+    # Convert enum to string for logging and API calls
+    model_str = model.value if isinstance(model, (OpenAIModel, DeepSeekModel)) else str(model)
+    
     logger.info(
-        "[scriptgen] start | model=%s temperature=%.2f target_seconds=%d scenes=%d",
-        model,
+        "[scriptgen] start | provider=%s model=%s temperature=%.2f target_seconds=%d scenes=%d",
+        provider,
+        model_str,
         temperature,
         target_duration_seconds,
         num_scenes,
@@ -101,7 +119,7 @@ def generate_topic_and_scenes(
     try:
         logger.info("[scriptgen] calling chat.completions with JSON schema format")
         resp = client.chat.completions.create(
-            model=model,
+            model=model_str,
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": user_msg},
@@ -113,7 +131,7 @@ def generate_topic_and_scenes(
         logger.warning("[scriptgen] schema format failed; retrying with json_object response_format")
         try:
             resp = client.chat.completions.create(
-                model=model,
+                model=model_str,
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": user_msg},

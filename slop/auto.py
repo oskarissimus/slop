@@ -6,7 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from rich.console import Console
 
-from .config import AppConfig
+from .config import AppConfig, LLMProvider
 from .pipeline import generate_video_pipeline
 from .utils import sanitize_title
 from .youtube_uploader import YouTubeUploader, UploadMetadata
@@ -17,8 +17,18 @@ console = Console()
 
 def _validate_required_env() -> None:
     missing = []
-    if not os.getenv("OPENAI_API_KEY"):
-        missing.append("OPENAI_API_KEY")
+    try:
+        cfg = AppConfig()
+        if cfg.llm_provider == LLMProvider.DEEPSEEK:
+            if not cfg.deepseek_api_key:
+                missing.append("DEEPSEEK_API_KEY")
+        else:
+            if not cfg.openai_api_key:
+                missing.append("OPENAI_API_KEY")
+    except Exception:
+        # If config loading fails, check env vars directly
+        if not os.getenv("OPENAI_API_KEY") and not os.getenv("DEEPSEEK_API_KEY"):
+            missing.append("OPENAI_API_KEY or DEEPSEEK_API_KEY")
     if not os.getenv("ELEVENLABS_API_KEY"):
         missing.append("ELEVENLABS_API_KEY")
     if missing:

@@ -1,8 +1,35 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from enum import Enum
+from typing import Literal, Optional, Union
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class LLMProvider(str, Enum):
+    """LLM provider options for scene generation."""
+    OPENAI = "openai"
+    DEEPSEEK = "deepseek"
+
+
+class OpenAIModel(str, Enum):
+    """OpenAI model options."""
+    GPT_4O = "gpt-4o"
+    GPT_4O_MINI = "gpt-4o-mini"
+    GPT_4_TURBO = "gpt-4-turbo"
+    GPT_4 = "gpt-4"
+    GPT_3_5_TURBO = "gpt-3.5-turbo"
+    O1 = "o1"
+    O1_MINI = "o1-mini"
+    O1_PREVIEW = "o1-preview"
+
+
+class DeepSeekModel(str, Enum):
+    """DeepSeek model options."""
+    DEEPSEEK_CHAT = "deepseek-chat"
+    DEEPSEEK_CODER = "deepseek-coder"
+    DEEPSEEK_REASONER = "deepseek-reasoner"
+    DEEPSEEK_R1 = "deepseek-r1"
 
 
 class AppConfig(BaseSettings):
@@ -27,8 +54,8 @@ class AppConfig(BaseSettings):
     #Bx2lBwIZJBilRBVc3AGO - kamień stulecia
 
     # Runtime/model knobs (production defaults)
-    chat_model: str = "gpt-4o"
-    scene_llm_model: str = "gpt-4o"
+    chat_model: Union[OpenAIModel, DeepSeekModel] = DeepSeekModel.DEEPSEEK_CHAT
+    scene_llm_model: Union[OpenAIModel, DeepSeekModel] = DeepSeekModel.DEEPSEEK_CHAT
     temperature: float = 0.7
     image_model: str = "gpt-image-1"
     image_quality: Literal["low", "medium", "high"] = "low"
@@ -40,7 +67,10 @@ class AppConfig(BaseSettings):
     # YouTube upload visibility
     youtube_privacy_status: Literal["public", "unlisted", "private"] = "private"
 
-    openai_api_key: str
+    # LLM provider selection
+    llm_provider: LLMProvider = LLMProvider.DEEPSEEK
+    openai_api_key: Optional[str] = None
+    deepseek_api_key: Optional[str] = None
     elevenlabs_api_key: Optional[str] = None
     drive_parent_folder_id: Optional[str] = None
 
