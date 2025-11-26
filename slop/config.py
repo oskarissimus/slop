@@ -54,8 +54,8 @@ class AppConfig(BaseSettings):
     #Bx2lBwIZJBilRBVc3AGO - kamień stulecia
 
     # Runtime/model knobs (production defaults)
-    chat_model: Union[OpenAIModel, DeepSeekModel] = DeepSeekModel.DEEPSEEK_CHAT
-    scene_llm_model: Union[OpenAIModel, DeepSeekModel] = DeepSeekModel.DEEPSEEK_CHAT
+    chat_model: Union[OpenAIModel, DeepSeekModel] = OpenAIModel.GPT_4O
+    scene_llm_model: Union[OpenAIModel, DeepSeekModel] = OpenAIModel.GPT_4O
     temperature: float = 0.7
     image_model: str = "gpt-image-1"
     image_quality: Literal["low", "medium", "high"] = "low"
