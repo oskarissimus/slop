@@ -563,5 +563,175 @@ def generate_reaction() -> None:
 
 
 
+@app.command(name="tts-test-context")
+def tts_test_context() -> None:
+    """Probe ElevenLabs models and list which support previous_text/next_text in convert_with_timestamps.
+
+    Uses AppConfig (pydantic-settings) for configuration and API key.
+    """
+    _ensure_env_loaded()
+
+    # Load config via pydantic (no direct os.getenv usage)
+    try:
+        cfg = AppConfig()
+    except Exception as e:
+        console.print(f"[red]Failed to load AppConfig (check your .env): {e}")
+        raise typer.Exit(code=2)
+
+    # Lazy import to avoid hard dependency on ElevenLabs for other commands
+    try:
+        from elevenlabs.client import ElevenLabs  # type: ignore
+    except Exception as e:
+        console.print(f"[red]Failed to import ElevenLabs SDK: {e}")
+        raise typer.Exit(code=3)
+
+    # Instantiate client using key from config
+    try:
+        client = ElevenLabs(api_key=cfg.elevenlabs_api_key)
+    except Exception as e:
+        console.print(f"[red]Failed to initialize ElevenLabs client: {e}")
+        raise typer.Exit(code=4)
+
+    # Discover models via SDK (trying common method names across versions)
+    try:
+        models_resource = getattr(client, "models", None)
+        if models_resource is None:
+            raise RuntimeError("Client has no 'models' resource. Update elevenlabs package.")
+
+        models_list = None
+        for method_name in ("get_all", "list", "list_models", "get_models"):
+            getter = getattr(models_resource, method_name, None)
+            if callable(getter):
+                try:
+                    models_list = getter()
+                    break
+                except Exception:
+                    continue
+        if models_list is None:
+            # As a last resort, attempt attribute common in some SDKs
+            models_list = getattr(models_resource, "_get_all", None)
+            if callable(models_list):
+                models_list = models_list()
+        if models_list is None:
+            raise RuntimeError("Unable to list models via ElevenLabs SDK. Tried multiple methods.")
+    except Exception as e:
+        console.print(f"[red]Failed to list ElevenLabs models: {e}")
+        raise typer.Exit(code=5)
+
+    # Normalize to iterable of model dict-like objects
+    def _to_dict(model_obj):
+        try:
+            # pydantic models have model_dump
+            dump = getattr(model_obj, "model_dump", None)
+            if callable(dump):
+                return dump()
+        except Exception:
+            pass
+        try:
+            # dataclass-like or simple objects
+            keys = [
+                k for k in dir(model_obj)
+                if not k.startswith("_") and not callable(getattr(model_obj, k, None))
+            ]
+            data = {k: getattr(model_obj, k) for k in keys}
+            # ensure model_id present if exists under different name
+            if "id" in data and "model_id" not in data:
+                data["model_id"] = data.get("id")
+            return data
+        except Exception:
+            pass
+        # Already a dict?
+        if isinstance(model_obj, dict):
+            return model_obj
+        return {"model_id": str(model_obj)}
+
+    models_info = [_to_dict(m) for m in models_list]
+
+    # Heuristic: prefer models that are for text_to_speech
+    def _is_tts_model(info: dict) -> bool:
+        model_id = str(info.get("model_id") or info.get("id") or "").lower()
+        model_type = str(info.get("type") or info.get("category") or "").lower()
+        categories = info.get("categories") or info.get("capabilities") or []
+        if isinstance(categories, dict):
+            # Some SDKs expose capabilities as dict
+            if any(
+                str(k).lower() in ("text_to_speech", "tts") and bool(v)
+                for k, v in categories.items()
+            ):
+                return True
+        if isinstance(categories, (list, tuple)):
+            if any(str(c).lower() in ("text_to_speech", "tts") for c in categories):
+                return True
+        if model_type in ("text_to_speech", "tts"):
+            return True
+        # Fallback: Eleven TTS model ids commonly start with 'eleven_'
+        return model_id.startswith("eleven_")
+
+    tts_models = [m for m in models_info if _is_tts_model(m)]
+    if not tts_models:
+        console.print("[yellow]No obvious TTS models detected from listing; proceeding to probe all returned models.")
+        tts_models = models_info
+
+    test_text = "This is a short test."
+    prev_text = "Previous sentence for context."
+    next_text = "Next sentence for continuity."
+
+    supported: list[tuple[str, str]] = []  # (model_id, display_name)
+    unsupported: list[tuple[str, str, str]] = []  # (model_id, display_name, error)
+
+    # Do minimal probing per model
+    for info in tts_models:
+        model_id = str(info.get("model_id") or info.get("id") or "")
+        display_name = str(info.get("display_name") or info.get("name") or model_id)
+        if not model_id:
+            continue
+        try:
+            kwargs = {
+                "voice_id": cfg.voice_id,
+                "text": test_text,
+                "model_id": model_id,
+                "output_format": cfg.tts_output_format,
+                "previous_text": prev_text,
+                "next_text": next_text,
+            }
+            resp = client.text_to_speech.convert_with_timestamps(**kwargs)
+            # Determine success by presence of audio field
+            audio_b64 = None
+            if isinstance(resp, dict):
+                audio_b64 = resp.get("audio_base64") or resp.get("audio_base_64") or resp.get("audio")
+            else:
+                for attr in ("audio_base64", "audio_base_64", "audio"):
+                    val = getattr(resp, attr, None)
+                    if isinstance(val, str) and val:
+                        audio_b64 = val
+                        break
+            if audio_b64:
+                supported.append((model_id, display_name))
+            else:
+                unsupported.append((model_id, display_name, "No audio returned"))
+        except Exception as e:
+            # Treat any exception as unsupported for context parameters
+            msg = str(e)
+            unsupported.append((model_id, display_name, msg))
+
+    # Present results
+    if supported:
+        console.print("[green]Models that handled previous_text/next_text without error:")
+        for mid, name in sorted(supported, key=lambda x: x[0].lower()):
+            console.print(f"  - {mid} | {name}")
+    else:
+        console.print("[red]No models succeeded with previous_text/next_text.")
+
+    if unsupported:
+        console.print("[cyan]Models that failed (likely unsupported for context, or other error):")
+        for mid, name, err in sorted(unsupported, key=lambda x: x[0].lower()):
+            # Keep error concise
+            short_err = err.strip().split("\n", 1)[0]
+            console.print(f"  - {mid} | {name} | {short_err}")
+
+    # Exit code 0 always; the goal is to enumerate capabilities, not fail the run
+    return
+
+
 
 
