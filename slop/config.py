@@ -1,4 +1,4 @@
-from __future__ import annotations
+AIfrom __future__ import annotations
 
 from enum import Enum
 from typing import Literal, Optional, Union
@@ -68,7 +68,7 @@ class AppConfig(BaseSettings):
     youtube_privacy_status: Literal["public", "unlisted", "private"] = "private"
 
     # LLM provider selection
-    llm_provider: LLMProvider = LLMProvider.DEEPSEEK
+    llm_provider: LLMProvider = LLMProvider.OPENAI
     openai_api_key: Optional[str] = None
     deepseek_api_key: Optional[str] = None
     elevenlabs_api_key: Optional[str] = None
