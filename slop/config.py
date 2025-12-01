@@ -35,11 +35,11 @@ class DeepSeekModel(str, Enum):
 class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 
-    duration_seconds: int = 180
+    duration_seconds: int = 120
     fps: int = 24
     resolution_width: int = 1024
     resolution_height: int = 1536
-    num_images: int = 18
+    num_images: int = 12
     voice_id: str = "pNInz6obpgDQGcFmaJgB"
     # ElevenLabs voice settings (Optional so they can be omitted if None)
     stability: Optional[float] = None
