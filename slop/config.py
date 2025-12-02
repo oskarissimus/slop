@@ -35,7 +35,7 @@ class DeepSeekModel(str, Enum):
 class AppConfig(BaseSettings):
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
 
-    duration_seconds: int = 120
+    duration_seconds: int = 180
     fps: int = 24
     resolution_width: int = 1024
     resolution_height: int = 1536
